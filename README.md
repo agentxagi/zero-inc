@@ -4,53 +4,41 @@
 
 <p align="center">
   <a href="#quickstart"><strong>Quickstart</strong></a> &middot;
+  <a href="#what-changed"><strong>What's Different</strong></a> &middot;
   <a href="https://paperclip.ing/docs"><strong>Docs</strong></a> &middot;
-  <a href="https://github.com/agentxagi/zero-inc"><strong>GitHub</strong></a> &middot;
-  <a href="https://discord.gg/m4HZY7xNG3"><strong>Discord</strong></a>
+  <a href="https://github.com/agentxagi/zero-inc"><strong>GitHub</strong></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/agentxagi/zero-inc/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
   <a href="https://github.com/agentxagi/zero-inc/stargazers"><img src="https://img.shields.io/github/stars/agentxagi/zero-inc?style=flat" alt="Stars" /></a>
-  <a href="https://discord.gg/m4HZY7xNG3"><img src="https://img.shields.io/discord/000000000?label=discord" alt="Discord" /></a>
+  <a href="https://github.com/paperclipai/paperclip"><img src="https://img.shields.io/badge/fork_of-paperclip-555" alt="Fork of Paperclip" /></a>
 </p>
-
-<br/>
-
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/773bdfb2-6d1e-4e30-8c5f-3487d5b70c8f" width="600" controls></video>
-</div>
 
 <br/>
 
 ## What is ZeroInc?
 
-# Open-source orchestration for zero-human companies
+**Fork of [Paperclip](https://github.com/paperclipai/paperclip) with production hardening, agent safety, and operational tooling built in.**
 
-**If OpenClaw is an _employee_, ZeroInc is the _company_**
+If OpenClaw is an _employee_, ZeroInc is the _company_.
 
-ZeroInc is a Node.js server and React UI that orchestrates a team of AI agents to run a business. Bring your own agents, assign goals, and track your agents' work and costs from one dashboard.
-
-It looks like a task manager — but under the hood it has org charts, budgets, governance, goal alignment, and agent coordination.
+ZeroInc orchestrates a team of AI agents to run a business. Bring your own agents (OpenClaw, Claude Code, Codex, Cursor), assign goals, and track work and costs from one dashboard. It has org charts, budgets, governance, goal alignment, and agent coordination.
 
 **Manage business goals, not pull requests.**
 
-|        | Step            | Example                                                            |
-| ------ | --------------- | ------------------------------------------------------------------ |
-| **01** | Define the goal | _"Build the #1 AI note-taking app to $1M MRR."_                    |
-| **02** | Hire the team   | CEO, CTO, engineers, designers, marketers — any bot, any provider. |
-| **03** | Approve and run | Review strategy. Set budgets. Hit go. Monitor from the dashboard.  |
-
-<br/>
-
-> **COMING SOON: ZeroMart** — Download and run entire companies with one click. Browse pre-built company templates — full org structures, agent configs, and skills — and import them into your ZeroInc instance in seconds.
+| Step | What | Example |
+|------|------|---------|
+| **01** | Define the goal | _"Build the #1 AI note-taking app to $1M MRR."_ |
+| **02** | Hire the team | CEO, CTO, engineers, designers — any bot, any provider. |
+| **03** | Approve and run | Review strategy. Set budgets. Hit go. Monitor. |
 
 <br/>
 
 <div align="center">
 <table>
   <tr>
-    <td align="center"><strong>Works<br/>with</strong></td>
+    <td align="center"><strong>Works with</strong></td>
     <td align="center"><img src="doc/assets/logos/openclaw.svg" width="32" alt="OpenClaw" /><br/><sub>OpenClaw</sub></td>
     <td align="center"><img src="doc/assets/logos/claude.svg" width="32" alt="Claude" /><br/><sub>Claude Code</sub></td>
     <td align="center"><img src="doc/assets/logos/codex.svg" width="32" alt="Codex" /><br/><sub>Codex</sub></td>
@@ -59,159 +47,136 @@ It looks like a task manager — but under the hood it has org charts, budgets, 
     <td align="center"><img src="doc/assets/logos/http.svg" width="32" alt="HTTP" /><br/><sub>HTTP</sub></td>
   </tr>
 </table>
-
 <em>If it can receive a heartbeat, it's hired.</em>
-
 </div>
 
 <br/>
 
-## ZeroInc is right for you if
+## What Changed from Paperclip?
 
-- ✅ You want to build **autonomous AI companies**
-- ✅ You **coordinate many different agents** (OpenClaw, Codex, Claude, Cursor) toward a common goal
-- ✅ You have **20 simultaneous Claude Code terminals** open and lose track of what everyone is doing
-- ✅ You want agents running **autonomously 24/7**, but still want to audit work and chime in when needed
-- ✅ You want to **monitor costs** and enforce budgets
-- ✅ You want a process for managing agents that **feels like using a task manager**
-- ✅ You want to manage your autonomous businesses **from your phone**
+ZeroInc is a production fork — we run it 24/7 with 15+ agents and have hardened the parts that break in real-world usage.
+
+### 🔒 Agent Safety
+
+| Feature | Paperclip | ZeroInc |
+|---------|-----------|---------|
+| **Inactivity timeout** | ❌ Agents can hang forever | ✅ 600s inactivity timeout + 30min hard cap |
+| **Destructive command guard** | ❌ None | ✅ Two-tier safety: BLOCK (rm -rf /, DROP DATABASE) + WARN (git reset --hard) |
+| **Code review hook** | ❌ None | ✅ Post-tool syntax check + security scan (54ms/file) |
+| **Stuck run cleanup** | Manual | ✅ `clear-stale-lock` script + coordinator watchdog |
+
+### 📊 Operational Visibility
+
+| Feature | Paperclip | ZeroInc |
+|---------|-----------|---------|
+| **Token budget monitoring** | Per-agent monthly budget only | ✅ Real-time ZAI quota check + auto-throttle at configurable % |
+| **Coordinator watchdog** | ❌ None | ✅ Auto-wake idle agents, detect stuck runs, cleanup orphans |
+| **Health check** | ❌ None | ✅ Periodic Paperclip + agent + task health monitoring |
+| **Telegram reporting** | ❌ None | ✅ 15-min status reports to operator |
+| **Structured logging** | Basic | ✅ Contextual logging with correlation IDs |
+
+### 🏗️ Architecture
+
+| Feature | Paperclip | ZeroInc |
+|---------|-----------|---------|
+| **Adapter timeout** | 0 (infinite) | ✅ 600s default, configurable per agent |
+| **Validation middleware** | Basic schema | ✅ Request/response validation with tests |
+| **Integration tests** | Minimal | ✅ 30+ integration tests for agents, heartbeat, checkout, issues |
+| **OpenClaw adapter** | Basic | ✅ Enhanced with env var injection, heartbeat tuning |
+
+### 🧰 Operator Tooling
+
+| Feature | Paperclip | ZeroInc |
+|---------|-----------|---------|
+| **Coordinator script** | ❌ None | ✅ Auto-sustain (keeps 5+ tasks active), agent wakeups, handoff detection |
+| **Output validator** | ❌ None | ✅ Agents must deliver outputs, not just mark tasks "done" |
+| **Circuit breaker** | ❌ None | ✅ Engagement/content/following state tracking |
+| **Investigate skill** | ❌ None | ✅ Structured debug pattern: Reproduce → Diagnose → Fix → Verify |
+
+### 🎨 UI Improvements
+
+| Feature | Paperclip | ZeroInc |
+|---------|-----------|---------|
+| **Approvals sidebar** | Inbox only (mixed) | ✅ Dedicated Approvals nav item with pending count badge |
+| **Approval payload rendering** | Basic | ✅ Enhanced payload display with decision notes |
 
 <br/>
 
-## Features
+## Quickstart
+
+```bash
+git clone https://github.com/agentxagi/zero-inc.git
+cd zero-inc
+pnpm install
+pnpm dev
+```
+
+Starts at `http://localhost:3100`. Embedded PostgreSQL created automatically.
+
+> **Requirements:** Node.js 20+, pnpm 9.15+
+
+<br/>
+
+## Features (inherited from Paperclip)
 
 <table>
 <tr>
 <td align="center" width="33%">
 <h3>🔌 Bring Your Own Agent</h3>
-Any agent, any runtime, one org chart. If it can receive a heartbeat, it's hired.
+Any agent, any runtime. If it can receive a heartbeat, it's hired.
 </td>
 <td align="center" width="33%">
 <h3>🎯 Goal Alignment</h3>
-Every task traces back to the company mission. Agents know <em>what</em> to do and <em>why</em>.
+Every task traces back to the company mission.
 </td>
 <td align="center" width="33%">
 <h3>💓 Heartbeats</h3>
-Agents wake on a schedule, check work, and act. Delegation flows up and down the org chart.
+Agents wake on schedule, check work, and act autonomously.
 </td>
 </tr>
 <tr>
 <td align="center">
 <h3>💰 Cost Control</h3>
-Monthly budgets per agent. When they hit the limit, they stop. No runaway costs.
+Monthly budgets per agent. Token monitoring with auto-throttle.
 </td>
 <td align="center">
 <h3>🏢 Multi-Company</h3>
-One deployment, many companies. Complete data isolation. One control plane for your portfolio.
+One deployment, many companies. Complete data isolation.
 </td>
 <td align="center">
 <h3>🎫 Ticket System</h3>
-Every conversation traced. Every decision explained. Full tool-call tracing and immutable audit log.
+Full conversation tracing, tool-call audit log.
 </td>
 </tr>
 <tr>
 <td align="center">
 <h3>🛡️ Governance</h3>
-You're the board. Approve hires, override strategy, pause or terminate any agent — at any time.
+Approve hires, override strategy, pause any agent.
 </td>
 <td align="center">
 <h3>📊 Org Chart</h3>
-Hierarchies, roles, reporting lines. Your agents have a boss, a title, and a job description.
+Hierarchies, roles, reporting lines.
 </td>
 <td align="center">
 <h3>📱 Mobile Ready</h3>
-Monitor and manage your autonomous businesses from anywhere.
+Monitor from anywhere.
 </td>
 </tr>
 </table>
 
 <br/>
 
-## Problems ZeroInc solves
+## Problems ZeroInc Solves
 
-| Without ZeroInc                                                                                                                     | With ZeroInc                                                                                                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| ❌ You have 20 Claude Code tabs open and can't track which one does what. On reboot you lose everything.                              | ✅ Tasks are ticket-based, conversations are threaded, sessions persist across reboots.                                                |
-| ❌ You manually gather context from several places to remind your bot what you're actually doing.                                     | ✅ Context flows from the task up through the project and company goals — your agent always knows what to do and why.                  |
-| ❌ Folders of agent configs are disorganized and you're re-inventing task management, communication, and coordination between agents. | ✅ ZeroInc gives you org charts, ticketing, delegation, and governance out of the box — so you run a company, not a pile of scripts. |
-| ❌ Runaway loops waste hundreds of dollars of tokens and max your quota before you even know what happened.                           | ✅ Cost tracking surfaces token budgets and throttles agents when they're out. Management prioritizes with budgets.                    |
-| ❌ You have recurring jobs (customer support, social, reports) and have to remember to manually kick them off.                        | ✅ Heartbeats handle regular work on a schedule. Management supervises.                                                                |
-| ❌ You have an idea, you have to find your repo, fire up Claude Code, keep a tab open, and babysit it.                                | ✅ Add a task in ZeroInc. Your coding agent works on it until it's done. Management reviews their work.                              |
-
-<br/>
-
-## Why ZeroInc is special
-
-ZeroInc handles the hard orchestration details correctly.
-
-|                                   |                                                                                                               |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Atomic execution.**             | Task checkout and budget enforcement are atomic, so no double-work and no runaway spend.                      |
-| **Persistent agent state.**       | Agents resume the same task context across heartbeats instead of restarting from scratch.                     |
-| **Runtime skill injection.**      | Agents can learn ZeroInc workflows and project context at runtime, without retraining.                      |
-| **Governance with rollback.**     | Approval gates are enforced, config changes are revisioned, and bad changes can be rolled back safely.        |
-| **Goal-aware execution.**         | Tasks carry full goal ancestry so agents consistently see the "why," not just a title.                        |
-| **Portable company templates.**   | Export/import orgs, agents, and skills with secret scrubbing and collision handling.                          |
-| **True multi-company isolation.** | Every entity is company-scoped, so one deployment can run many companies with separate data and audit trails. |
-
-<br/>
-
-## What ZeroInc is not
-
-|                              |                                                                                                                      |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| **Not a chatbot.**           | Agents have jobs, not chat windows.                                                                                  |
-| **Not an agent framework.**  | We don't tell you how to build agents. We tell you how to run a company made of them.                                |
-| **Not a workflow builder.**  | No drag-and-drop pipelines. ZeroInc models companies — with org charts, goals, budgets, and governance.            |
-| **Not a prompt manager.**    | Agents bring their own prompts, models, and runtimes. ZeroInc manages the organization they work in.               |
-| **Not a single-agent tool.** | This is for teams. If you have one agent, you probably don't need ZeroInc. If you have twenty — you definitely do. |
-| **Not a code review tool.**  | ZeroInc orchestrates work, not pull requests. Bring your own review process.                                       |
-
-<br/>
-
-## Quickstart
-
-Open source. Self-hosted. No ZeroInc account required.
-
-```bash
-npx paperclipai onboard --yes
-```
-
-Or manually:
-
-```bash
-git clone https://github.com/agentxagi/zero-inc.git
-cd paperclip
-pnpm install
-pnpm dev
-```
-
-This starts the API server at `http://localhost:3100`. An embedded PostgreSQL database is created automatically — no setup required.
-
-> **Requirements:** Node.js 20+, pnpm 9.15+
-
-<br/>
-
-## FAQ
-
-**What does a typical setup look like?**
-Locally, a single Node.js process manages an embedded Postgres and local file storage. For production, point it at your own Postgres and deploy however you like. Configure projects, agents, and goals — the agents take care of the rest.
-
-If you're a solo-entreprenuer you can use Tailscale to access ZeroInc on the go. Then later you can deploy to e.g. Vercel when you need it.
-
-**Can I run multiple companies?**
-Yes. A single deployment can run an unlimited number of companies with complete data isolation.
-
-**How is ZeroInc different from agents like OpenClaw or Claude Code?**
-ZeroInc _uses_ those agents. It orchestrates them into a company — with org charts, budgets, goals, governance, and accountability.
-
-**Why should I use ZeroInc instead of just pointing my OpenClaw to Asana or Trello?**
-Agent orchestration has subtleties in how you coordinate who has work checked out, how to maintain sessions, monitoring costs, establishing governance - ZeroInc does this for you.
-
-(Bring-your-own-ticket-system is on the Roadmap)
-
-**Do agents run continuously?**
-By default, agents run on scheduled heartbeats and event-based triggers (task assignment, @-mentions). You can also hook in continuous agents like OpenClaw. You bring your agent and ZeroInc coordinates.
+| Without ZeroInc | With ZeroInc |
+|-----------------|-------------|
+| ❌ 20 Claude Code tabs, can't track what each one does | ✅ Ticket-based tasks, threaded conversations, persistent sessions |
+| ❌ Agents hang forever burning tokens | ✅ Inactivity timeout + hard cap kills stuck runs |
+| ❌ No visibility into agent spending | ✅ Real-time quota monitoring + auto-throttle |
+| ❌ Agents mark tasks "done" without delivering outputs | ✅ Output validator enforces real deliverables |
+| ❌ Runaway loops waste hundreds of dollars | ✅ Cost tracking + circuit breaker + budget enforcement |
+| ❌ Manual agent wakeups and monitoring | ✅ Coordinator watchdog runs every 5 minutes |
+| ❌ One agent crashes and blocks the whole pipeline | ✅ Stuck run cleanup + orphan detection |
 
 <br/>
 
@@ -219,34 +184,45 @@ By default, agents run on scheduled heartbeats and event-based triggers (task as
 
 ```bash
 pnpm dev              # Full dev (API + UI, watch mode)
-pnpm dev:once         # Full dev without file watching
 pnpm dev:server       # Server only
 pnpm build            # Build all
 pnpm typecheck        # Type checking
-pnpm test:run         # Run tests
+pnpm test:run         # Run tests (30+ integration tests)
 pnpm db:generate      # Generate DB migration
 pnpm db:migrate       # Apply migrations
 ```
 
-See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full development guide.
+See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full guide.
+
+<br/>
+
+## Syncing with Upstream
+
+ZeroInc tracks [paperclipai/paperclip](https://github.com/paperclipai/paperclip) as upstream:
+
+```bash
+git fetch upstream
+git merge upstream/master
+# resolve conflicts if any
+git push origin master
+```
 
 <br/>
 
 ## Roadmap
 
-- ⚪ Get OpenClaw onboarding easier
-- ⚪ Get cloud agents working e.g. Cursor / e2b agents
-- ⚪ ClipMart - buy and sell entire agent companies
-- ⚪ Easy agent configurations / easier to understand
-- ⚪ Better support for harness engineering
-- 🟢 Plugin system (e.g. if you want to add a knowledgebase, custom tracing, queues, etc)
-- ⚪ Better docs
+- ⚪ Custom agent personas (Security Engineer, Code Reviewer, SRE) as templates
+- ⚪ ZeroMart — downloadable company templates
+- ⚪ Webhook system for external integrations
+- ⚪ Metrics dashboard with per-agent cost analytics
+- ⚪ Mobile app for on-the-go monitoring
+- 🟢 Enhanced approval workflow with decision notes
 
 <br/>
 
 ## Contributing
 
-We welcome contributions. See the [contributing guide](CONTRIBUTING.md) for details.
+We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 <br/>
 
@@ -254,26 +230,18 @@ We welcome contributions. See the [contributing guide](CONTRIBUTING.md) for deta
 
 - [Discord](https://discord.gg/m4HZY7xNG3) — Join the community
 - [GitHub Issues](https://github.com/agentxagi/zero-inc/issues) — bugs and feature requests
-- [GitHub Discussions](https://github.com/agentxagi/zero-inc/discussions) — ideas and RFC
+- [Upstream](https://github.com/paperclipai/paperclip) — Original Paperclip project
 
 <br/>
 
 ## License
 
-MIT &copy; 2026 ZeroInc — fork of Paperclip
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/image?repos=agentxagi/zero-inc&type=date&legend=top-left)](https://www.star-history.com/?repos=paperclipai%2Fpaperclip&type=date&legend=top-left)
+MIT © 2026 ZeroInc — fork of [Paperclip](https://github.com/paperclipai/paperclip) by paperclipai
 
 <br/>
 
 ---
 
 <p align="center">
-  <img src="doc/assets/footer.jpg" alt="" width="720" />
-</p>
-
-<p align="center">
-  <sub>Open source under MIT. Built for people who want to run companies, not babysit agents.</sub>
+  <sub>Zero humans, full company. Built for people who want to run companies, not babysit agents.</sub>
 </p>
