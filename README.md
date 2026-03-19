@@ -260,7 +260,7 @@ We welcome contributions. See the [contributing guide](CONTRIBUTING.md) for deta
 
 ## License
 
-MIT &copy; 2026 Paperclip
+MIT &copy; 2026 ZeroInc — fork of Paperclip
 
 ## Star History
 
