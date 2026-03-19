@@ -3,9 +3,10 @@
 </p>
 
 <p align="center">
+  <a href="https://zeroinc.valor.digital">🌐 Website</a> &middot;
+  <a href="https://github.com/agentxagi/zero-inc"><strong>GitHub</strong></a> &middot;
   <a href="#quickstart"><strong>Quickstart</strong></a> &middot;
-  <a href="#what-changed"><strong>What's Different</strong></a> &middot;
-  <a href="https://github.com/agentxagi/zero-inc"><strong>GitHub</strong></a>
+  <a href="#what-changed"><strong>What's Different</strong></a>
 </p>
 
 <p align="center">
