@@ -1,3 +1,3 @@
-export { logger, httpLogger } from "./logger.js";
+export { logger, httpLogger, correlationMiddleware, agentContextMiddleware, issueContextMiddleware } from "./logger.js";
 export { errorHandler } from "./error-handler.js";
-export { validate } from "./validate.js";
+export { validate, validateQuery, validateParams } from "./validate.js";

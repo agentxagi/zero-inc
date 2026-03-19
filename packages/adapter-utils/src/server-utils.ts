@@ -478,22 +478,52 @@ export async function runChildProcess(
         let stderr = "";
         let logChain: Promise<void> = Promise.resolve();
 
-        const timeout =
-          opts.timeoutSec > 0
-            ? setTimeout(() => {
-                timedOut = true;
-                child.kill("SIGTERM");
-                setTimeout(() => {
-                  if (!child.killed) {
-                    child.kill("SIGKILL");
-                  }
-                }, Math.max(1, opts.graceSec) * 1000);
-              }, opts.timeoutSec * 1000)
-            : null;
+        // Inactivity-based timeout: resets on every stdout/stderr chunk.
+        // A process that's actively producing output is alive — only kill
+        // when it goes completely silent for timeoutSec seconds.
+        let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+        let maxWallClockTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const clearInactivityTimer = () => {
+          if (inactivityTimer) clearTimeout(inactivityTimer);
+          inactivityTimer = null;
+        };
+
+        const resetInactivityTimer = () => {
+          clearInactivityTimer();
+          if (opts.timeoutSec > 0) {
+            inactivityTimer = setTimeout(() => {
+              timedOut = true;
+              child.kill("SIGTERM");
+              setTimeout(() => {
+                if (!child.killed) {
+                  child.kill("SIGKILL");
+                }
+              }, Math.max(1, opts.graceSec) * 1000);
+            }, opts.timeoutSec * 1000);
+          }
+        };
+
+        // Hard wall-clock cap at 30 minutes — no single run should exceed this.
+        // Prevents pathological cases where a process dribbles output to stay alive.
+        const maxWallClockSec = 1800;
+        maxWallClockTimer = setTimeout(() => {
+          timedOut = true;
+          child.kill("SIGTERM");
+          setTimeout(() => {
+            if (!child.killed) {
+              child.kill("SIGKILL");
+            }
+          }, Math.max(1, opts.graceSec) * 1000);
+        }, maxWallClockSec * 1000);
+
+        // Start the inactivity timer
+        resetInactivityTimer();
 
         child.stdout?.on("data", (chunk: unknown) => {
           const text = String(chunk);
           stdout = appendWithCap(stdout, text);
+          resetInactivityTimer();
           logChain = logChain
             .then(() => opts.onLog("stdout", text))
             .catch((err) => onLogError(err, runId, "failed to append stdout log chunk"));
@@ -502,13 +532,15 @@ export async function runChildProcess(
         child.stderr?.on("data", (chunk: unknown) => {
           const text = String(chunk);
           stderr = appendWithCap(stderr, text);
+          resetInactivityTimer();
           logChain = logChain
             .then(() => opts.onLog("stderr", text))
             .catch((err) => onLogError(err, runId, "failed to append stderr log chunk"));
         });
 
         child.on("error", (err: Error) => {
-          if (timeout) clearTimeout(timeout);
+          clearInactivityTimer();
+          if (maxWallClockTimer) clearTimeout(maxWallClockTimer);
           runningProcesses.delete(runId);
           const errno = (err as NodeJS.ErrnoException).code;
           const pathValue = mergedEnv.PATH ?? mergedEnv.Path ?? "";
@@ -520,7 +552,8 @@ export async function runChildProcess(
         });
 
         child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
-          if (timeout) clearTimeout(timeout);
+          clearInactivityTimer();
+          if (maxWallClockTimer) clearTimeout(maxWallClockTimer);
           runningProcesses.delete(runId);
           void logChain.finally(() => {
             resolve({

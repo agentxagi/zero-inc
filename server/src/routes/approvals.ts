@@ -232,6 +232,46 @@ export function approvalRoutes(db: Db) {
         entityId: approval.id,
         details: { type: approval.type },
       });
+
+      // Wake requesting agent on rejection for human_decision type
+      if (approval.requestedByAgentId && approval.type === "human_decision") {
+        const linkedIssues = await issueApprovalsSvc.listIssuesForApproval(approval.id);
+        const linkedIssueIds = linkedIssues.map((issue: { id: string }) => issue.id);
+        const primaryIssueId = linkedIssueIds[0] ?? null;
+        try {
+          await heartbeat.wakeup(approval.requestedByAgentId, {
+            source: "automation",
+            triggerDetail: "system",
+            reason: "approval_rejected",
+            payload: {
+              approvalId: approval.id,
+              approvalStatus: approval.status,
+              issueId: primaryIssueId,
+              issueIds: linkedIssueIds,
+            },
+            requestedByActorType: "user",
+            requestedByActorId: req.actor.userId ?? "board",
+            contextSnapshot: {
+              source: "approval.rejected",
+              approvalId: approval.id,
+              approvalStatus: approval.status,
+              issueId: primaryIssueId,
+              issueIds: linkedIssueIds,
+              taskId: primaryIssueId,
+              wakeReason: "approval_rejected",
+            },
+          });
+        } catch (wakeErr) {
+          logger.warn(
+            {
+              err: wakeErr,
+              approvalId: approval.id,
+              requestedByAgentId: approval.requestedByAgentId,
+            },
+            "failed to queue requester wakeup after human_decision rejection",
+          );
+        }
+      }
     }
 
     res.json(redactApprovalPayload(approval));

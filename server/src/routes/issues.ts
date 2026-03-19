@@ -822,6 +822,23 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     const actor = getActorInfo(req);
     const { comment: commentBody, hiddenAt: hiddenAtRaw, ...updateFields } = req.body;
+
+    // Require comment when reverting completed/cancelled issues to blocked
+    // This prevents silent done→blocked loops that waste agent budget
+    const isRevertingToBlocked =
+      updateFields.status === "blocked" &&
+      (existing.status === "done" || existing.status === "cancelled");
+    if (isRevertingToBlocked && !commentBody) {
+      res.status(422).json({
+        error: "Comment required when reverting completed or cancelled issue to blocked",
+        details: {
+          from: existing.status,
+          to: "blocked",
+          reason: "This safeguard prevents accidental reversion of completed work without explanation.",
+        },
+      });
+      return;
+    }
     if (hiddenAtRaw !== undefined) {
       updateFields.hiddenAt = hiddenAtRaw ? new Date(hiddenAtRaw) : null;
     }
@@ -1204,7 +1221,13 @@ export function issueRoutes(db: Db, storage: StorageService) {
     let currentIssue = issue;
 
     if (reopenRequested && isClosed) {
-      const reopenedIssue = await svc.update(id, { status: "todo" });
+      // When reopening, also clear any stale execution lock
+      const reopenedIssue = await svc.update(id, {
+        status: "todo",
+        executionRunId: null,
+        executionAgentNameKey: null,
+        executionLockedAt: null,
+      });
       if (!reopenedIssue) {
         res.status(404).json({ error: "Issue not found" });
         return;

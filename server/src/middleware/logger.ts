@@ -2,8 +2,10 @@ import path from "node:path";
 import fs from "node:fs";
 import pino from "pino";
 import { pinoHttp } from "pino-http";
+import type { Request, Response, NextFunction } from "express";
 import { readConfigFile } from "../config-file.js";
 import { resolveDefaultLogsDir, resolveHomeAwarePath } from "../home-paths.js";
+import { runWithContext, generateCorrelationId, getContext } from "../logging/context.js";
 
 function resolveServerLogDir(): string {
   const envOverride = process.env.PAPERCLIP_LOG_DIR?.trim();
@@ -59,17 +61,29 @@ export const httpLogger = pinoHttp({
     return `${req.method} ${req.url} ${res.statusCode} — ${errMsg}`;
   },
   customProps(req, res) {
+    const logContext = getContext();
+    const props: Record<string, unknown> = {
+      correlationId: logContext.correlationId,
+    };
+
+    if (logContext.agentId) props.agentId = logContext.agentId;
+    if (logContext.agentName) props.agentName = logContext.agentName;
+    if (logContext.issueId) props.issueId = logContext.issueId;
+    if (logContext.issueIdentifier) props.issueIdentifier = logContext.issueIdentifier;
+    if (logContext.runId) props.runId = logContext.runId;
+    if (logContext.companyId) props.companyId = logContext.companyId;
+
     if (res.statusCode >= 400) {
       const ctx = (res as any).__errorContext;
       if (ctx) {
         return {
+          ...props,
           errorContext: ctx.error,
           reqBody: ctx.reqBody,
           reqParams: ctx.reqParams,
           reqQuery: ctx.reqQuery,
         };
       }
-      const props: Record<string, unknown> = {};
       const { body, params, query } = req as any;
       if (body && typeof body === "object" && Object.keys(body).length > 0) {
         props.reqBody = body;
@@ -83,8 +97,60 @@ export const httpLogger = pinoHttp({
       if ((req as any).route?.path) {
         props.routePath = (req as any).route.path;
       }
-      return props;
     }
-    return {};
+    return props;
   },
 });
+
+/**
+ * Express middleware that sets up correlation ID and log context for each request.
+ */
+export function correlationMiddleware(req: Request, res: Response, next: NextFunction) {
+  const correlationId =
+    (req.headers["x-correlation-id"] as string) ||
+    (req.headers["x-request-id"] as string) ||
+    generateCorrelationId();
+
+  const context = {
+    correlationId,
+    companyId: (req as any).company?.id,
+    userId: (req as any).user?.id,
+  };
+
+  res.setHeader("X-Correlation-Id", correlationId);
+
+  runWithContext(context, () => {
+    next();
+  });
+}
+
+/**
+ * Middleware to set agent context in log context.
+ */
+export function agentContextMiddleware(req: Request, _res: Response, next: NextFunction) {
+  const agent = (req as any).agent;
+  if (agent) {
+    const ctx = getContext();
+    Object.assign(ctx, {
+      agentId: agent.id,
+      agentName: agent.name,
+    });
+  }
+  next();
+}
+
+/**
+ * Middleware to set issue context in log context.
+ */
+export function issueContextMiddleware(req: Request, _res: Response, next: NextFunction) {
+  const issueId = req.params.issueId;
+  const issueIdentifier = req.params.identifier;
+  if (issueId || issueIdentifier) {
+    const ctx = getContext();
+    Object.assign(ctx, {
+      issueId,
+      issueIdentifier,
+    });
+  }
+  next();
+}

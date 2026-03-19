@@ -22,7 +22,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     if (typeof v === "string") env[k] = v;
   }
 
-  const timeoutSec = asNumber(config.timeoutSec, 0);
+  const timeoutSec = asNumber(config.timeoutSec, 600);
   const graceSec = asNumber(config.graceSec, 15);
 
   if (onMeta) {

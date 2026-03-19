@@ -431,3 +431,97 @@ Networking behavior for this smoke script:
 - auto-detects and prints a Paperclip host URL reachable from inside OpenClaw Docker
 - default container-side host alias is `host.docker.internal` (override with `PAPERCLIP_HOST_FROM_CONTAINER` / `PAPERCLIP_HOST_PORT`)
 - if Paperclip rejects container hostnames in authenticated/private mode, allow `host.docker.internal` via `pnpm paperclipai allowed-hostname host.docker.internal` and restart Paperclip
+
+## Testing
+
+Paperclip uses [Vitest](https://vitest.dev/) for unit and integration tests.
+
+### Running Tests
+
+```bash
+# Run all tests once
+pnpm test:run
+
+# Run tests in watch mode during development
+pnpm test
+
+# Run tests for a specific package
+pnpm --filter @paperclipai/server test:run
+
+# Run a specific test file
+pnpm vitest run server/src/__tests__/validation-middleware.test.ts
+```
+
+### Test Structure
+
+Tests are organized by type:
+
+```
+server/src/__tests__/
+├── *.test.ts              # Unit tests for specific modules
+├── integration/
+│   ├── test-helpers.ts              # Shared test utilities
+│   ├── issues-checkout.integration.test.ts  # Issue checkout flow tests
+│   ├── agents-api.integration.test.ts       # Agents API tests
+│   └── heartbeat.integration.test.ts        # Heartbeat lifecycle tests
+└── ...
+
+tests/e2e/
+├── onboarding.spec.ts     # E2E tests with Playwright
+└── playwright.config.ts
+```
+
+### Test Categories
+
+1. **Unit Tests** (`*.test.ts`): Test individual functions and modules in isolation
+   - Validation middleware
+   - Adapter models
+   - Agent authentication
+   - Shortname resolution
+
+2. **Integration Tests** (`integration/*.test.ts`): Test API contracts and business logic
+   - Issue checkout flow
+   - Agents API endpoints
+   - Heartbeat lifecycle
+
+3. **E2E Tests** (`tests/e2e/*.spec.ts`): Full system tests with Playwright
+   - Onboarding flows
+   - UI interactions
+
+### Writing Tests
+
+```typescript
+import { describe, it, expect } from "vitest";
+
+describe("My Module", () => {
+  it("should do something", () => {
+    expect(true).toBe(true);
+  });
+});
+```
+
+For integration tests that test API contracts:
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { randomUUID } from "node:crypto";
+
+describe("API Endpoint Tests", () => {
+  it("validates expected request format", () => {
+    const request = {
+      id: randomUUID(),
+      status: "todo",
+    };
+    expect(request.id).toBeDefined();
+  });
+});
+```
+
+### CI Integration
+
+Tests run automatically in GitHub Actions:
+
+- **PR Verify**: Runs `pnpm test:run` on every pull request to `master`
+- **E2E Tests**: Runs Playwright tests (manual trigger via workflow_dispatch)
+
+See `.github/workflows/pr-verify.yml` for the CI configuration.

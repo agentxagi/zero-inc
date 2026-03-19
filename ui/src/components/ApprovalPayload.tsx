@@ -1,10 +1,11 @@
-import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck } from "lucide-react";
+import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck, UserCheck } from "lucide-react";
 import { formatCents } from "../lib/utils";
 
 export const typeLabel: Record<string, string> = {
   hire_agent: "Hire Agent",
   approve_ceo_strategy: "CEO Strategy",
   budget_override_required: "Budget Override",
+  human_decision: "Human Decision",
 };
 
 /** Build a contextual label for an approval, e.g. "Hire Agent: Designer" */
@@ -20,6 +21,7 @@ export const typeIcon: Record<string, typeof UserPlus> = {
   hire_agent: UserPlus,
   approve_ceo_strategy: Lightbulb,
   budget_override_required: ShieldAlert,
+  human_decision: UserCheck,
 };
 
 export const defaultTypeIcon = ShieldCheck;
@@ -101,8 +103,34 @@ export function BudgetOverridePayload({ payload }: { payload: Record<string, unk
   );
 }
 
+export function HumanDecisionPayload({ payload }: { payload: Record<string, unknown> }) {
+  const description = payload.description ?? payload.context ?? payload.text;
+  const options = payload.options;
+  return (
+    <div className="mt-3 space-y-1.5 text-sm">
+      <PayloadField label="Title" value={payload.title} />
+      {!!description && (
+        <div className="mt-2 rounded-md bg-muted/40 px-3 py-2 text-sm text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto">
+          {String(description)}
+        </div>
+      )}
+      {Array.isArray(options) && options.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <span className="text-muted-foreground text-xs">Options</span>
+          <ul className="list-disc list-inside text-xs space-y-0.5">
+            {options.map((opt: unknown, i: number) => (
+              <li key={i}>{typeof opt === "string" ? opt : JSON.stringify(opt)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ApprovalPayloadRenderer({ type, payload }: { type: string; payload: Record<string, unknown> }) {
   if (type === "hire_agent") return <HireAgentPayload payload={payload} />;
   if (type === "budget_override_required") return <BudgetOverridePayload payload={payload} />;
+  if (type === "human_decision") return <HumanDecisionPayload payload={payload} />;
   return <CeoStrategyPayload payload={payload} />;
 }
