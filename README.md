@@ -5,21 +5,19 @@
 <p align="center">
   <a href="#quickstart"><strong>Quickstart</strong></a> &middot;
   <a href="#what-changed"><strong>What's Different</strong></a> &middot;
-  <a href="https://paperclip.ing/docs"><strong>Docs</strong></a> &middot;
   <a href="https://github.com/agentxagi/zero-inc"><strong>GitHub</strong></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/agentxagi/zero-inc/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
   <a href="https://github.com/agentxagi/zero-inc/stargazers"><img src="https://img.shields.io/github/stars/agentxagi/zero-inc?style=flat" alt="Stars" /></a>
-  <a href="https://github.com/paperclipai/paperclip"><img src="https://img.shields.io/badge/fork_of-paperclip-555" alt="Fork of Paperclip" /></a>
 </p>
 
 <br/>
 
 ## What is ZeroInc?
 
-**Fork of [Paperclip](https://github.com/paperclipai/paperclip) with production hardening, agent safety, and operational tooling built in.**
+Open-source orchestration for zero-human companies.
 
 If OpenClaw is an _employee_, ZeroInc is the _company_.
 
@@ -52,53 +50,53 @@ ZeroInc orchestrates a team of AI agents to run a business. Bring your own agent
 
 <br/>
 
-## What Changed from Paperclip?
+## What Makes ZeroInc Different?
 
-ZeroInc is a production fork — we run it 24/7 with 15+ agents and have hardened the parts that break in real-world usage.
+ZeroInc is built for production — we run it 24/7 with 15+ agents and have hardened every part that breaks in real-world usage.
 
 ### 🔒 Agent Safety
 
-| Feature | Paperclip | ZeroInc |
-|---------|-----------|---------|
-| **Inactivity timeout** | ❌ Agents can hang forever | ✅ 600s inactivity timeout + 30min hard cap |
-| **Destructive command guard** | ❌ None | ✅ Two-tier safety: BLOCK (rm -rf /, DROP DATABASE) + WARN (git reset --hard) |
-| **Code review hook** | ❌ None | ✅ Post-tool syntax check + security scan (54ms/file) |
-| **Stuck run cleanup** | Manual | ✅ `clear-stale-lock` script + coordinator watchdog |
+| Feature | Status |
+|---------|--------|
+| **Inactivity timeout** | ✅ 600s inactivity timeout + 30min hard cap |
+| **Destructive command guard** | ✅ Two-tier: BLOCK (rm -rf /, DROP DATABASE) + WARN (git reset --hard) |
+| **Code review hook** | ✅ Post-tool syntax check + security scan (54ms/file) |
+| **Stuck run cleanup** | ✅ `clear-stale-lock` script + coordinator watchdog |
 
 ### 📊 Operational Visibility
 
-| Feature | Paperclip | ZeroInc |
-|---------|-----------|---------|
-| **Token budget monitoring** | Per-agent monthly budget only | ✅ Real-time ZAI quota check + auto-throttle at configurable % |
-| **Coordinator watchdog** | ❌ None | ✅ Auto-wake idle agents, detect stuck runs, cleanup orphans |
-| **Health check** | ❌ None | ✅ Periodic Paperclip + agent + task health monitoring |
-| **Telegram reporting** | ❌ None | ✅ 15-min status reports to operator |
-| **Structured logging** | Basic | ✅ Contextual logging with correlation IDs |
+| Feature | Status |
+|---------|--------|
+| **Token budget monitoring** | ✅ Real-time quota check + auto-throttle at configurable % |
+| **Coordinator watchdog** | ✅ Auto-wake idle agents, detect stuck runs, cleanup orphans |
+| **Health check** | ✅ Periodic agent + task health monitoring |
+| **Telegram reporting** | ✅ 15-min status reports to operator |
+| **Structured logging** | ✅ Contextual logging with correlation IDs |
 
 ### 🏗️ Architecture
 
-| Feature | Paperclip | ZeroInc |
-|---------|-----------|---------|
-| **Adapter timeout** | 0 (infinite) | ✅ 600s default, configurable per agent |
-| **Validation middleware** | Basic schema | ✅ Request/response validation with tests |
-| **Integration tests** | Minimal | ✅ 30+ integration tests for agents, heartbeat, checkout, issues |
-| **OpenClaw adapter** | Basic | ✅ Enhanced with env var injection, heartbeat tuning |
+| Feature | Status |
+|---------|--------|
+| **Adapter timeout** | ✅ 600s default, configurable per agent |
+| **Validation middleware** | ✅ Request/response validation with tests |
+| **Integration tests** | ✅ 30+ integration tests for agents, heartbeat, checkout, issues |
+| **OpenClaw adapter** | ✅ Enhanced with env var injection, heartbeat tuning |
 
 ### 🧰 Operator Tooling
 
-| Feature | Paperclip | ZeroInc |
-|---------|-----------|---------|
-| **Coordinator script** | ❌ None | ✅ Auto-sustain (keeps 5+ tasks active), agent wakeups, handoff detection |
-| **Output validator** | ❌ None | ✅ Agents must deliver outputs, not just mark tasks "done" |
-| **Circuit breaker** | ❌ None | ✅ Engagement/content/following state tracking |
-| **Investigate skill** | ❌ None | ✅ Structured debug pattern: Reproduce → Diagnose → Fix → Verify |
+| Feature | Status |
+|---------|--------|
+| **Coordinator script** | ✅ Auto-sustain (keeps 5+ tasks active), agent wakeups, handoff detection |
+| **Output validator** | ✅ Agents must deliver outputs, not just mark tasks "done" |
+| **Circuit breaker** | ✅ Engagement/content/following state tracking |
+| **Investigate skill** | ✅ Structured debug: Reproduce → Diagnose → Fix → Verify |
 
-### 🎨 UI Improvements
+### 🎨 UI
 
-| Feature | Paperclip | ZeroInc |
-|---------|-----------|---------|
-| **Approvals sidebar** | Inbox only (mixed) | ✅ Dedicated Approvals nav item with pending count badge |
-| **Approval payload rendering** | Basic | ✅ Enhanced payload display with decision notes |
+| Feature | Status |
+|---------|--------|
+| **Approvals sidebar** | ✅ Dedicated nav item with pending count badge |
+| **Approval payload rendering** | ✅ Enhanced payload display with decision notes |
 
 <br/>
 
@@ -117,7 +115,7 @@ Starts at `http://localhost:3100`. Embedded PostgreSQL created automatically.
 
 <br/>
 
-## Features (inherited from Paperclip)
+## Features
 
 <table>
 <tr>
@@ -196,19 +194,6 @@ See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full guide.
 
 <br/>
 
-## Syncing with Upstream
-
-ZeroInc tracks [paperclipai/paperclip](https://github.com/paperclipai/paperclip) as upstream:
-
-```bash
-git fetch upstream
-git merge upstream/master
-# resolve conflicts if any
-git push origin master
-```
-
-<br/>
-
 ## Roadmap
 
 - ⚪ Custom agent personas (Security Engineer, Code Reviewer, SRE) as templates
@@ -226,17 +211,9 @@ We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 <br/>
 
-## Community
-
-- [Discord](https://discord.gg/m4HZY7xNG3) — Join the community
-- [GitHub Issues](https://github.com/agentxagi/zero-inc/issues) — bugs and feature requests
-- [Upstream](https://github.com/paperclipai/paperclip) — Original Paperclip project
-
-<br/>
-
 ## License
 
-MIT © 2026 ZeroInc — fork of [Paperclip](https://github.com/paperclipai/paperclip) by paperclipai
+MIT © 2026 ZeroInc
 
 <br/>
 
