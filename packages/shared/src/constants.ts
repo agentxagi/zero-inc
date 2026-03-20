@@ -296,6 +296,9 @@ export const AGENT_HOOK_EVENT_TYPES = [
   "heartbeat.run.failed",
   "heartbeat.run.cancelled",
   "heartbeat.run.timed_out",
+  "approval.created",
+  "approval.approved",
+  "approval.rejected",
 ] as const;
 export type AgentHookEventType = (typeof AGENT_HOOK_EVENT_TYPES)[number];
 
