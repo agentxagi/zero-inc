@@ -80,6 +80,12 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/skills/
   }'
 ```
 
+You can also use source strings such as:
+
+- `google-labs-code/stitch-skills/design-md`
+- `vercel-labs/agent-browser/agent-browser`
+- `npx skills add https://github.com/vercel-labs/agent-browser --skill agent-browser`
+
 If the task is to discover skills from the company project workspaces first:
 
 ```sh

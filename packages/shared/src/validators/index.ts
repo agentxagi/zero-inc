@@ -10,6 +10,10 @@ export {
 } from "./agent-hooks.js";
 
 export {
+  instanceGeneralSettingsSchema,
+  patchInstanceGeneralSettingsSchema,
+  type InstanceGeneralSettings,
+  type PatchInstanceGeneralSettings,
   instanceExperimentalSettingsSchema,
   patchInstanceExperimentalSettingsSchema,
   type InstanceExperimentalSettings,
@@ -32,10 +36,43 @@ export {
   type UpdateCompanyBranding,
 } from "./company.js";
 export {
+  companySkillSourceTypeSchema,
+  companySkillTrustLevelSchema,
+  companySkillCompatibilitySchema,
+  companySkillSourceBadgeSchema,
+  companySkillFileInventoryEntrySchema,
+  companySkillSchema,
+  companySkillListItemSchema,
+  companySkillUsageAgentSchema,
+  companySkillDetailSchema,
+  companySkillUpdateStatusSchema,
+  companySkillImportSchema,
+  companySkillProjectScanRequestSchema,
+  companySkillProjectScanSkippedSchema,
+  companySkillProjectScanConflictSchema,
+  companySkillProjectScanResultSchema,
+  companySkillCreateSchema,
+  companySkillFileDetailSchema,
+  companySkillFileUpdateSchema,
+  type CompanySkillImport,
+  type CompanySkillProjectScan,
+  type CompanySkillCreate,
+  type CompanySkillFileUpdate,
+} from "./company-skill.js";
+export {
+  agentSkillStateSchema,
+  agentSkillSyncModeSchema,
+  agentSkillEntrySchema,
+  agentSkillSnapshotSchema,
+  agentSkillSyncSchema,
+  type AgentSkillSync,
+} from "./adapter-skills.js";
+export {
   portabilityIncludeSchema,
-  portabilitySecretRequirementSchema,
+  portabilityEnvInputSchema,
   portabilityCompanyManifestEntrySchema,
   portabilityAgentManifestEntrySchema,
+  portabilitySkillManifestEntrySchema,
   portabilityManifestSchema,
   portabilitySourceSchema,
   portabilityTargetSchema,
@@ -53,6 +90,9 @@ export {
   createAgentSchema,
   createAgentHireSchema,
   updateAgentSchema,
+  agentInstructionsBundleModeSchema,
+  updateAgentInstructionsBundleSchema,
+  upsertAgentInstructionsFileSchema,
   updateAgentInstructionsPathSchema,
   createAgentKeySchema,
   wakeAgentSchema,
@@ -63,6 +103,8 @@ export {
   type CreateAgent,
   type CreateAgentHire,
   type UpdateAgent,
+  type UpdateAgentInstructionsBundle,
+  type UpsertAgentInstructionsFile,
   type UpdateAgentInstructionsPath,
   type CreateAgentKey,
   type WakeAgent,
@@ -165,6 +207,21 @@ export {
   type RotateSecret,
   type UpdateSecret,
 } from "./secret.js";
+
+export {
+  createRoutineSchema,
+  updateRoutineSchema,
+  createRoutineTriggerSchema,
+  updateRoutineTriggerSchema,
+  runRoutineSchema,
+  rotateRoutineTriggerSecretSchema,
+  type CreateRoutine,
+  type UpdateRoutine,
+  type CreateRoutineTrigger,
+  type UpdateRoutineTrigger,
+  type RunRoutine,
+  type RotateRoutineTriggerSecret,
+} from "./routine.js";
 
 export {
   createCostEventSchema,

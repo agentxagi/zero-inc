@@ -45,8 +45,8 @@ type CapturePayload = {
 };
 
 describe("gemini execute", () => {
-  it("passes prompt as final argument and injects zeroinc env vars", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "zeroinc-gemini-execute-"));
+  it("passes prompt via --prompt and injects paperclip env vars", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-gemini-execute-"));
     const workspace = path.join(root, "workspace");
     const commandPath = path.join(root, "gemini");
     const capturePath = path.join(root, "capture.json");
@@ -96,11 +96,14 @@ describe("gemini execute", () => {
       const capture = JSON.parse(await fs.readFile(capturePath, "utf8")) as CapturePayload;
       expect(capture.argv).toContain("--output-format");
       expect(capture.argv).toContain("stream-json");
+      expect(capture.argv).toContain("--prompt");
       expect(capture.argv).toContain("--approval-mode");
       expect(capture.argv).toContain("yolo");
-      expect(capture.argv.at(-1)).toContain("Follow the zeroinc heartbeat.");
-      expect(capture.argv.at(-1)).toContain("ZeroInc runtime note:");
-      expect(capture.zeroincEnvKeys).toEqual(
+      const promptFlagIndex = capture.argv.indexOf("--prompt");
+      const promptArg = promptFlagIndex >= 0 ? capture.argv[promptFlagIndex + 1] : "";
+      expect(promptArg).toContain("Follow the paperclip heartbeat.");
+      expect(promptArg).toContain("Paperclip runtime note:");
+      expect(capture.paperclipEnvKeys).toEqual(
         expect.arrayContaining([
           "PAPERCLIP_AGENT_ID",
           "PAPERCLIP_API_KEY",

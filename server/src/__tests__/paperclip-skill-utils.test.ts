@@ -30,8 +30,9 @@ describe("zeroinc skill utils", () => {
 
     const entries = await listZeroIncSkillEntries(moduleDir);
 
-    expect(entries.map((entry) => entry.name)).toEqual(["zeroinc"]);
-    expect(entries[0]?.source).toBe(path.join(root, "skills", "zeroinc"));
+    expect(entries.map((entry) => entry.key)).toEqual(["paperclipai/paperclip/paperclip"]);
+    expect(entries.map((entry) => entry.runtimeName)).toEqual(["paperclip"]);
+    expect(entries[0]?.source).toBe(path.join(root, "skills", "paperclip"));
   });
 
   it("removes stale maintainer-only symlinks from a shared skills home", async () => {

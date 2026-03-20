@@ -25,7 +25,7 @@ export default defineConfig({
   webServer: {
     command: `pnpm zeroinc run`,
     url: `${BASE_URL}/api/health`,
-    reuseExistingServer: !!process.env.CI,
+    reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     stdout: "pipe",
     stderr: "pipe",
