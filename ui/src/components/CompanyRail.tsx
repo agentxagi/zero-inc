@@ -31,7 +31,7 @@ import {
 import type { Company } from "@paperclipai/shared";
 import { CompanyPatternIcon } from "./CompanyPatternIcon";
 
-const ORDER_STORAGE_KEY = "paperclip.companyOrder";
+const ORDER_STORAGE_KEY = "zeroinc.companyOrder";
 
 function getStoredOrder(): string[] {
   try {

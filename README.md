@@ -55,6 +55,18 @@ ZeroInc orchestrates a team of AI agents to run a business. Bring your own agent
 
 ZeroInc is built for production — we run it 24/7 with 15+ agents and have hardened every part that breaks in real-world usage.
 
+### 🛡️ Quality Gates & Review Pipeline (NEW)
+
+The only agent orchestrator with **automatic quality gates and mandatory code review**.
+
+| Feature | Status |
+|---------|--------|
+| **Quality Gates** | ✅ Validates every task completion: comment required, duration sanity, stale lock detection |
+| **Review Pipeline** | ✅ `in_progress` → `in_review` → `done`. Auto-assigns Code Reviewer. Never self-review. |
+| **Quality Score v2** | ✅ Points system (+10/-15/-3), sliding window (20 attempts), recency multiplier, streak bonus |
+| **Agent States** | ✅ Excellent / Good / Fair / Poor / Critical / Warming Up — auto-assign skips low-score agents |
+| **Max Review Cycles** | ✅ 3 failed reviews → auto-escalate to human |
+
 ### 🔒 Agent Safety
 
 | Feature | Status |
@@ -82,6 +94,7 @@ ZeroInc is built for production — we run it 24/7 with 15+ agents and have hard
 | **Validation middleware** | ✅ Request/response validation with tests |
 | **Integration tests** | ✅ 30+ integration tests for agents, heartbeat, checkout, issues |
 | **OpenClaw adapter** | ✅ Enhanced with env var injection, heartbeat tuning |
+| **Heartbeat Hooks** | ✅ Declarative hooks: trigger automations from heartbeat lifecycle events |
 
 ### 🧰 Operator Tooling
 
@@ -157,8 +170,8 @@ Approve hires, override strategy, pause any agent.
 Hierarchies, roles, reporting lines.
 </td>
 <td align="center">
-<h3>📱 Mobile Ready</h3>
-Monitor from anywhere.
+<h3>🤖 Quality Gates</h3>
+Automatic validation before task completion. Mandatory code review.
 </td>
 </tr>
 </table>
@@ -172,10 +185,12 @@ Monitor from anywhere.
 | ❌ 20 Claude Code tabs, can't track what each one does | ✅ Ticket-based tasks, threaded conversations, persistent sessions |
 | ❌ Agents hang forever burning tokens | ✅ Inactivity timeout + hard cap kills stuck runs |
 | ❌ No visibility into agent spending | ✅ Real-time quota monitoring + auto-throttle |
-| ❌ Agents mark tasks "done" without delivering outputs | ✅ Output validator enforces real deliverables |
+| ❌ Agents mark tasks "done" without delivering outputs | ✅ Quality Gates block fake completions |
+| ❌ No code review for AI-generated code | ✅ Review Pipeline auto-assigns reviewer, approves or rejects |
 | ❌ Runaway loops waste hundreds of dollars | ✅ Cost tracking + circuit breaker + budget enforcement |
 | ❌ Manual agent wakeups and monitoring | ✅ Coordinator watchdog runs every 5 minutes |
 | ❌ One agent crashes and blocks the whole pipeline | ✅ Stuck run cleanup + orphan detection |
+| ❌ No way to know which agents deliver quality | ✅ Quality Score v2 with recency weighting and streak tracking |
 
 <br/>
 
@@ -200,9 +215,11 @@ See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full guide.
 - ⚪ Custom agent personas (Security Engineer, Code Reviewer, SRE) as templates
 - ⚪ ZeroMart — downloadable company templates
 - ⚪ Webhook system for external integrations
-- ⚪ Metrics dashboard with per-agent cost analytics
+- ⚪ Metrics dashboard with per-agent quality and cost analytics
 - ⚪ Mobile app for on-the-go monitoring
-- 🟢 Enhanced approval workflow with decision notes
+- 🟢 Quality Gates + Review Pipeline (built-in code review)
+- 🟢 Heartbeat Hooks (declarative automation)
+- 🟢 Human Approval via Telegram buttons
 
 <br/>
 
