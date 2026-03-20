@@ -289,6 +289,24 @@ export const LIVE_EVENT_TYPES = [
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
 
+export const AGENT_HOOK_EVENT_TYPES = [
+  "heartbeat.run.started",
+  "heartbeat.run.finished",
+  "heartbeat.run.succeeded",
+  "heartbeat.run.failed",
+  "heartbeat.run.cancelled",
+  "heartbeat.run.timed_out",
+] as const;
+export type AgentHookEventType = (typeof AGENT_HOOK_EVENT_TYPES)[number];
+
+export const AGENT_HOOK_ACTION_TYPES = [
+  "command",
+  "webhook",
+  "wake_agent",
+  "assign_issue",
+] as const;
+export type AgentHookActionType = (typeof AGENT_HOOK_ACTION_TYPES)[number];
+
 export const PRINCIPAL_TYPES = ["user", "agent"] as const;
 export type PrincipalType = (typeof PRINCIPAL_TYPES)[number];
 
@@ -431,7 +449,7 @@ export type PluginCapability = (typeof PLUGIN_CAPABILITIES)[number];
 
 /**
  * UI extension slot types. Each slot type corresponds to a mount point in the
- * Paperclip UI where plugin components can be rendered.
+ * ZeroInc UI where plugin components can be rendered.
  *
  * @see PLUGIN_SPEC.md §19 — UI Extension Model
  */
