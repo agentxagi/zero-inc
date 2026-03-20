@@ -106,6 +106,9 @@ export {
   type CreateIssueAttachmentMetadata,
   type IssueDocumentFormat,
   type UpsertIssueDocument,
+  qualityGateConfigSchema,
+  type QualityGateConfig,
+  DEFAULT_QUALITY_GATE_CONFIG,
 } from "./issue.js";
 
 export {

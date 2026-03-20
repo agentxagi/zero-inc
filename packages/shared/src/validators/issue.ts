@@ -119,3 +119,25 @@ export const upsertIssueDocumentSchema = z.object({
 
 export type IssueDocumentFormat = z.infer<typeof issueDocumentFormatSchema>;
 export type UpsertIssueDocument = z.infer<typeof upsertIssueDocumentSchema>;
+
+// ---------------------------------------------------------------------------
+// Quality Gate Configuration
+// ---------------------------------------------------------------------------
+
+export const qualityGateConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    requireComment: z.boolean().optional(),
+    requireMinimumDuration: z.number().int().positive().optional(),
+    autoReopen: z.boolean().optional(),
+  })
+  .strict();
+
+export type QualityGateConfig = z.infer<typeof qualityGateConfigSchema>;
+
+export const DEFAULT_QUALITY_GATE_CONFIG: Required<QualityGateConfig> = {
+  enabled: true,
+  requireComment: true,
+  requireMinimumDuration: 10,
+  autoReopen: true,
+};
