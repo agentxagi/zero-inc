@@ -1,4 +1,4 @@
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
 import { agents, issueComments, issues } from "@zeroinc/db";
 import type { QualityGateResult } from "./quality-gate.js";
@@ -70,8 +70,10 @@ export function reviewPipelineService(db: Db) {
 
     if (!issue) return null;
 
-    // Find an available reviewer: active/idle agent with reviewer role, not the assignee
-    const [reviewer] = await db
+    // Find an available reviewer: prefer agent with a reviewer role, fallback to any available
+    let reviewerAgentId: string | null = null;
+
+    const [matched] = await db
       .select({ id: agents.id })
       .from(agents)
       .where(
@@ -80,23 +82,42 @@ export function reviewPipelineService(db: Db) {
           ne(agents.status, "terminated"),
           ne(agents.status, "error"),
           ne(agents.id, issue.assigneeAgentId ?? ""),
+          inArray(agents.role, config.reviewerRoles),
         ),
       )
       .limit(1);
 
-    if (!reviewer) return null;
+    if (matched) {
+      reviewerAgentId = matched.id;
+    } else {
+      const [fallback] = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(
+          and(
+            eq(agents.companyId, issue.companyId),
+            ne(agents.status, "terminated"),
+            ne(agents.status, "error"),
+            ne(agents.id, issue.assigneeAgentId ?? ""),
+          ),
+        )
+        .limit(1);
+      reviewerAgentId = fallback?.id ?? null;
+    }
+
+    if (!reviewerAgentId) return null;
 
     await db
       .update(issues)
       .set({
-        reviewerAgentId: reviewer.id,
+        reviewerAgentId: reviewerAgentId,
         originalAssigneeId: issue.assigneeAgentId,
         reviewRequestedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(issues.id, issueId));
 
-    return reviewer.id;
+    return reviewerAgentId;
   }
 
   // --- Transition to in_review after quality gate passes ---

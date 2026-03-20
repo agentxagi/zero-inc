@@ -7,6 +7,7 @@ import {
   timestamp,
   jsonb,
   index,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 
@@ -38,6 +39,10 @@ export const agents = pgTable(
     qualityScore: integer("quality_score").notNull().default(100),
     qualityPoints: jsonb("quality_points").$type<number[]>().notNull().default([]),
     qualityStreak: integer("quality_streak").notNull().default(0),
+    qualityState: text("quality_state").notNull().default("warming-up"),
+    qualityBadge: text("quality_badge").notNull().default("warming-up"),
+    qualityAttempts: integer("quality_attempts").notNull().default(0),
+    qualityAutoAssign: boolean("quality_auto_assign").notNull().default(true),
     lastReopenReasons: jsonb("last_reopen_reasons").$type<string[]>().notNull().default([]),
     totalReviewed: integer("total_reviewed").notNull().default(0),
     totalReviewApproved: integer("total_review_approved").notNull().default(0),
