@@ -1,9 +1,6 @@
 name: Refresh Lockfile
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
 
 concurrency:
@@ -31,7 +28,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Refresh pnpm lockfile
@@ -68,26 +65,13 @@ jobs:
           git commit -m "chore(lockfile): refresh pnpm-lock.yaml"
           git push --force origin "$BRANCH"
 
-          # Create PR if one doesn't already exist
           existing=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number')
           if [ -z "$existing" ]; then
             gh pr create \
               --head "$BRANCH" \
               --title "chore(lockfile): refresh pnpm-lock.yaml" \
-              --body "Auto-generated lockfile refresh after dependencies changed on master. This PR only updates pnpm-lock.yaml."
+              --body "Auto-generated lockfile refresh."
             echo "Created new PR."
           else
-            echo "PR #$existing already exists, branch updated via force push."
+            echo "PR #$existing already exists."
           fi
-
-      - name: Enable auto-merge for lockfile PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          pr_url="$(gh pr list --head chore/refresh-lockfile --json url --jq '.[0].url')"
-          if [ -z "$pr_url" ]; then
-            echo "Error: lockfile PR was not found." >&2
-            exit 1
-          fi
-
-          gh pr merge --auto --squash --delete-branch "$pr_url"
