@@ -14,8 +14,6 @@ import {
   upsertIssueDocumentSchema,
   updateIssueSchema,
 } from "@zeroinc/shared";
-import { qualityGateService } from "../services/quality-gate.js";
-import { reviewPipelineService, DEFAULT_REVIEW_PIPELINE_CONFIG } from "../services/review-pipeline.js";
 import type { StorageService } from "../storage/types.js";
 import { validate } from "../middleware/validate.js";
 import {
@@ -49,8 +47,6 @@ export function issueRoutes(db: Db, storage: StorageService) {
   const goalsSvc = goalService(db);
   const issueApprovalsSvc = issueApprovalService(db);
   const executionWorkspacesSvc = executionWorkspaceService(db);
-  const qualityGate = qualityGateService(db);
-  const reviewPipeline = reviewPipelineService(db);
   const workProductsSvc = workProductService(db);
   const documentsSvc = documentService(db);
   const upload = multer({
@@ -936,57 +932,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     }
 
-    // Quality gate: validate done transitions
-    let qualityGateReverted = false;
-    if (issue.status === "done" && existing.assigneeAgentId) {
-      const config = qualityGate.resolveConfig();
-      const result = await qualityGate.runChecks(
-        {
-          id: issue.id,
-          companyId: issue.companyId,
-          status: existing.status,
-          assigneeAgentId: existing.assigneeAgentId,
-          executionRunId: existing.executionRunId,
-          executionLockedAt: existing.executionLockedAt,
-          startedAt: existing.startedAt,
-          completedAt: issue.completedAt,
-        },
-        config,
-      );
-      if (!result.passed && config.autoReopen) {
-        const blockers = result.checks.filter((c) => !c.pass && c.severity === "blocker");
-        const failReasons = blockers.map((c) => c.message);
-        await svc.update(issue.id, { status: "in_progress" });
-        await svc.addComment(
-          issue.id,
-          `## Quality Gate Failed\n\nThe following checks blocked completion:\n\n${blockers.map((b) => `- **${b.message}**`).join("\n")}\n\nStatus reverted to \`in_progress\`. Please address these issues and try again.`,
-          {},
-        );
-        await qualityGate.recordCompletion(existing.assigneeAgentId, result);
-        qualityGateReverted = true;
-        const refreshed = await svc.getById(issue.id);
-        if (refreshed) issue = refreshed;
-      } else if (result.passed) {
-        await qualityGate.recordCompletion(existing.assigneeAgentId, result);
-        // Review pipeline: transition to in_review instead of staying done
-        const reviewConfig = reviewPipeline.resolveConfig();
-        const sentToReview = await reviewPipeline.transitionToReview(
-          issue.id,
-          existing.assigneeAgentId,
-          result,
-          reviewConfig,
-        );
-        if (sentToReview) {
-          const refreshed = await svc.getById(issue.id);
-          if (refreshed) issue = refreshed;
-        }
-      }
-    }
-
-    // Track blocked transitions for agent quality score
-    if (issue.status === "blocked" && existing.status !== "blocked" && existing.assigneeAgentId) {
-      await qualityGate.incrementBlockedCount(existing.assigneeAgentId);
-    }
+    // Quality gates and review pipeline now enforced in issues service layer
+    // (covers both HTTP and plugin API paths — see VAL-181)
 
     const assigneeChanged = assigneeWillChange;
     const statusChangedFromBacklog =
