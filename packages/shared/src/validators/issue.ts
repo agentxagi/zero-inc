@@ -141,3 +141,28 @@ export const DEFAULT_QUALITY_GATE_CONFIG: Required<QualityGateConfig> = {
   requireMinimumDuration: 10,
   autoReopen: true,
 };
+
+// ---------------------------------------------------------------------------
+// Review Pipeline
+// ---------------------------------------------------------------------------
+
+export const reviewFindingSchema = z
+  .object({
+    severity: z.enum(["blocker", "suggestion", "nit"]),
+    file: z.string().optional(),
+    line: z.number().int().positive().optional(),
+    message: z.string().min(1),
+  })
+  .strict();
+
+export const submitReviewSchema = z
+  .object({
+    verdict: z.enum(["approved", "changes_requested"]),
+    summary: z.string().optional(),
+    findings: z.array(reviewFindingSchema).optional(),
+    questions: z.array(z.string()).optional(),
+  })
+  .strict();
+
+export type SubmitReview = z.infer<typeof submitReviewSchema>;
+export type ReviewFinding = z.infer<typeof reviewFindingSchema>;

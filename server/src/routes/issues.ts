@@ -15,6 +15,7 @@ import {
   updateIssueSchema,
 } from "@paperclipai/shared";
 import { qualityGateService } from "../services/quality-gate.js";
+import { reviewPipelineService, DEFAULT_REVIEW_PIPELINE_CONFIG } from "../services/review-pipeline.js";
 import type { StorageService } from "../storage/types.js";
 import { validate } from "../middleware/validate.js";
 import {
@@ -49,6 +50,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
   const issueApprovalsSvc = issueApprovalService(db);
   const executionWorkspacesSvc = executionWorkspaceService(db);
   const qualityGate = qualityGateService(db);
+  const reviewPipeline = reviewPipelineService(db);
   const workProductsSvc = workProductService(db);
   const documentsSvc = documentService(db);
   const upload = multer({
@@ -960,12 +962,24 @@ export function issueRoutes(db: Db, storage: StorageService) {
           `## Quality Gate Failed\n\nThe following checks blocked completion:\n\n${blockers.map((b) => `- **${b.message}**`).join("\n")}\n\nStatus reverted to \`in_progress\`. Please address these issues and try again.`,
           {},
         );
-        await qualityGate.recordCompletion(existing.assigneeAgentId, false, failReasons);
+        await qualityGate.recordCompletion(existing.assigneeAgentId, result);
         qualityGateReverted = true;
         const refreshed = await svc.getById(issue.id);
         if (refreshed) issue = refreshed;
       } else if (result.passed) {
-        await qualityGate.recordCompletion(existing.assigneeAgentId, true, []);
+        await qualityGate.recordCompletion(existing.assigneeAgentId, result);
+        // Review pipeline: transition to in_review instead of staying done
+        const reviewConfig = reviewPipeline.resolveConfig();
+        const sentToReview = await reviewPipeline.transitionToReview(
+          issue.id,
+          existing.assigneeAgentId,
+          result,
+          reviewConfig,
+        );
+        if (sentToReview) {
+          const refreshed = await svc.getById(issue.id);
+          if (refreshed) issue = refreshed;
+        }
       }
     }
 

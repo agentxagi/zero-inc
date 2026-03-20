@@ -109,6 +109,10 @@ export {
   qualityGateConfigSchema,
   type QualityGateConfig,
   DEFAULT_QUALITY_GATE_CONFIG,
+  submitReviewSchema,
+  reviewFindingSchema,
+  type SubmitReview,
+  type ReviewFinding,
 } from "./issue.js";
 
 export {

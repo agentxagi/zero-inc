@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "quality_points" jsonb DEFAULT '[]' NOT NULL;
