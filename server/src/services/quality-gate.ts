@@ -60,25 +60,34 @@ const MIN_ATTEMPTS_FOR_SCORE = 5;
 // ---------------------------------------------------------------------------
 
 export function calculateScore(points: number[], streak: number): number {
-  if (points.length < MIN_ATTEMPTS_FOR_SCORE) return -1; // warming up
+  if (points.length === 0) return 100; // no data yet
 
-  let weightedEarned = 0;
-  let weightedPossible = 0;
+  // Score starts at 100 and adjusts per attempt
+  // +10 pass: +0 (neutral — this is expected behavior)
+  // -15 blocker: -8 (significant penalty)
+  // -3 warning: -2 (minor penalty)
+  // 0 info: -1 (slight penalty for not being a clean pass)
+  let score = 100;
 
   for (let i = 0; i < points.length; i++) {
-    const weight = 1.0 - i * 0.03;
-    weightedEarned += points[i] * weight;
-    weightedPossible += POINTS_PASS * weight;
+    const recency = 1.0 - i * 0.02; // recent attempts weigh more
+    if (points[i] >= POINTS_PASS) {
+      // Clean pass: no change (expected behavior)
+    } else if (points[i] <= POINTS_BLOCKER) {
+      score -= 8 * recency; // blocker: heavy penalty
+    } else if (points[i] <= POINTS_WARNING) {
+      score -= 2 * recency; // warning: minor penalty
+    } else {
+      score -= 1 * recency; // info: tiny penalty
+    }
   }
 
-  let finalScore = weightedPossible > 0 ? (weightedEarned / weightedPossible) * 100 : 0;
-  finalScore = Math.max(0, finalScore);
+  // Streak bonus: consecutive passes recover score
+  if (streak >= 10) score += 5;
+  else if (streak >= 5) score += 3;
+  else if (streak >= 3) score += 1;
 
-  // Streak bonus
-  if (streak >= 10) finalScore = Math.min(100, finalScore * 1.1);
-  else if (streak >= 5) finalScore = Math.min(100, finalScore * 1.05);
-
-  return Math.round(finalScore * 10) / 10;
+  return Math.round(Math.max(0, Math.min(100, score)) * 10) / 10;
 }
 
 export function getQualityState(score: number, attempts: number): {
@@ -253,9 +262,9 @@ export function qualityGateService(db: Db) {
       lastReopenReasons = [...failReasons, ...lastReopenReasons].slice(0, 10);
     }
 
-    // Calculate v2 score — keep existing DB value during warmup
+    // Calculate v2 score — always real, even during warmup
     const score = calculateScore(newPoints, qualityStreak);
-    const dbScore = score >= 0 ? Math.round(score) : (agent.qualityScore ?? 100);
+    const dbScore = Math.round(score);
 
     await db
       .update(agents)
@@ -265,6 +274,7 @@ export function qualityGateService(db: Db) {
         qualityScore: dbScore,
         qualityPoints: newPoints,
         qualityStreak,
+        qualityAttempts: newPoints.length,
         lastReopenReasons,
         updatedAt: new Date(),
       })
@@ -290,7 +300,7 @@ export function qualityGateService(db: Db) {
     const points: number[] = Array.isArray(agent.qualityPoints) ? agent.qualityPoints : [];
     const streak = agent.qualityStreak ?? 0;
     const score = calculateScore(points, streak);
-    const displayScore = score >= 0 ? score : (agent.qualityScore ?? 100);
+    const displayScore = Math.round(score);
     const { state, badge, autoAssign } = getQualityState(score, points.length);
 
     return {
