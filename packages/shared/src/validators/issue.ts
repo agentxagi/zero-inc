@@ -56,6 +56,22 @@ export const createIssueSchema = z.object({
 
 export type CreateIssue = z.infer<typeof createIssueSchema>;
 
+export const listIssuesQuerySchema = z.object({
+  status: z.string().optional(),
+  assigneeAgentId: z.string().uuid().optional(),
+  assigneeUserId: z.string().optional(),
+  touchedByUserId: z.string().optional(),
+  unreadForUserId: z.string().optional(),
+  projectId: z.string().uuid().optional(),
+  parentId: z.string().uuid().optional(),
+  labelId: z.string().uuid().optional(),
+  q: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(200).optional(),
+  offset: z.coerce.number().int().nonnegative().optional(),
+});
+
+export type ListIssuesQuery = z.infer<typeof listIssuesQuerySchema>;
+
 export const createIssueLabelSchema = z.object({
   name: z.string().trim().min(1).max(48),
   color: z.string().regex(/^#(?:[0-9a-fA-F]{6})$/, "Color must be a 6-digit hex value"),

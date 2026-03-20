@@ -9,13 +9,15 @@ import {
   checkoutIssueSchema,
   createIssueSchema,
   linkIssueApprovalSchema,
+  listIssuesQuerySchema,
   issueDocumentKeySchema,
   updateIssueWorkProductSchema,
   upsertIssueDocumentSchema,
   updateIssueSchema,
 } from "@zeroinc/shared";
 import type { StorageService } from "../storage/types.js";
-import { validate } from "../middleware/validate.js";
+import type { ListIssuesQuery } from "@zeroinc/shared";
+import { validate, validateQuery } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
@@ -195,12 +197,13 @@ export function issueRoutes(db: Db, storage: StorageService) {
     });
   });
 
-  router.get("/companies/:companyId/issues", async (req, res) => {
+  router.get("/companies/:companyId/issues", validateQuery(listIssuesQuerySchema), async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
-    const assigneeUserFilterRaw = req.query.assigneeUserId as string | undefined;
-    const touchedByUserFilterRaw = req.query.touchedByUserId as string | undefined;
-    const unreadForUserFilterRaw = req.query.unreadForUserId as string | undefined;
+    const q = (req as Request & { validatedQuery: ListIssuesQuery }).validatedQuery;
+    const assigneeUserFilterRaw = q.assigneeUserId;
+    const touchedByUserFilterRaw = q.touchedByUserId;
+    const unreadForUserFilterRaw = q.unreadForUserId;
     const assigneeUserId =
       assigneeUserFilterRaw === "me" && req.actor.type === "board"
         ? req.actor.userId
@@ -228,15 +231,15 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
 
     const result = await svc.list(companyId, {
-      status: req.query.status as string | undefined,
-      assigneeAgentId: req.query.assigneeAgentId as string | undefined,
+      status: q.status,
+      assigneeAgentId: q.assigneeAgentId,
       assigneeUserId,
       touchedByUserId,
       unreadForUserId,
-      projectId: req.query.projectId as string | undefined,
-      parentId: req.query.parentId as string | undefined,
-      labelId: req.query.labelId as string | undefined,
-      q: req.query.q as string | undefined,
+      projectId: q.projectId,
+      parentId: q.parentId,
+      labelId: q.labelId,
+      q: q.q,
     });
     res.json(result);
   });

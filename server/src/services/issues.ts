@@ -1130,6 +1130,13 @@ export function issueService(db: Db) {
 
       if (!current) throw notFound("Issue not found");
 
+      // Already finalized — no checkout ownership needed.
+      // This prevents 409s when heartbeat completes and the agent's
+      // trailing requests (PATCH done, comments, release) arrive afterward.
+      if (current.status === "done" || current.status === "cancelled") {
+        return { ...current, adoptedFromRunId: null as string | null };
+      }
+
       if (
         current.status === "in_progress" &&
         current.assigneeAgentId === actorAgentId &&
@@ -1178,6 +1185,11 @@ export function issueService(db: Db) {
         .then((rows) => rows[0] ?? null);
 
       if (!existing) return null;
+      // Skip release for already-finalized issues — prevents heartbeat/gateway
+      // race from reverting done→todo after the heartbeat already completed.
+      if (existing.status === "done" || existing.status === "cancelled") {
+        return existing;
+      }
       if (actorAgentId && existing.assigneeAgentId && existing.assigneeAgentId !== actorAgentId) {
         throw conflict("Only assignee can release issue");
       }
