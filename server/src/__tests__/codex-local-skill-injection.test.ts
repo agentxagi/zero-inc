@@ -2,18 +2,18 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ensureCodexSkillsInjected } from "@paperclipai/adapter-codex-local/server";
+import { ensureCodexSkillsInjected } from "@zeroinc/adapter-codex-local/server";
 
 async function makeTempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
 }
 
-async function createPaperclipRepoSkill(root: string, skillName: string) {
+async function createZeroIncRepoSkill(root: string, skillName: string) {
   await fs.mkdir(path.join(root, "server"), { recursive: true });
   await fs.mkdir(path.join(root, "packages", "adapter-utils"), { recursive: true });
   await fs.mkdir(path.join(root, "skills", skillName), { recursive: true });
   await fs.writeFile(path.join(root, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n", "utf8");
-  await fs.writeFile(path.join(root, "package.json"), '{"name":"paperclip"}\n', "utf8");
+  await fs.writeFile(path.join(root, "package.json"), '{"name":"zeroinc"}\n', "utf8");
   await fs.writeFile(
     path.join(root, "skills", skillName, "SKILL.md"),
     `---\nname: ${skillName}\n---\n`,
@@ -38,17 +38,17 @@ describe("codex local adapter skill injection", () => {
     cleanupDirs.clear();
   });
 
-  it("repairs a Codex Paperclip skill symlink that still points at another live checkout", async () => {
-    const currentRepo = await makeTempDir("paperclip-codex-current-");
-    const oldRepo = await makeTempDir("paperclip-codex-old-");
-    const skillsHome = await makeTempDir("paperclip-codex-home-");
+  it("repairs a Codex ZeroInc skill symlink that still points at another live checkout", async () => {
+    const currentRepo = await makeTempDir("zeroinc-codex-current-");
+    const oldRepo = await makeTempDir("zeroinc-codex-old-");
+    const skillsHome = await makeTempDir("zeroinc-codex-home-");
     cleanupDirs.add(currentRepo);
     cleanupDirs.add(oldRepo);
     cleanupDirs.add(skillsHome);
 
-    await createPaperclipRepoSkill(currentRepo, "paperclip");
-    await createPaperclipRepoSkill(oldRepo, "paperclip");
-    await fs.symlink(path.join(oldRepo, "skills", "paperclip"), path.join(skillsHome, "paperclip"));
+    await createZeroIncRepoSkill(currentRepo, "zeroinc");
+    await createZeroIncRepoSkill(oldRepo, "zeroinc");
+    await fs.symlink(path.join(oldRepo, "skills", "zeroinc"), path.join(skillsHome, "zeroinc"));
 
     const logs: Array<{ stream: "stdout" | "stderr"; chunk: string }> = [];
     await ensureCodexSkillsInjected(
@@ -57,40 +57,40 @@ describe("codex local adapter skill injection", () => {
       },
       {
         skillsHome,
-        skillsEntries: [{ name: "paperclip", source: path.join(currentRepo, "skills", "paperclip") }],
+        skillsEntries: [{ name: "zeroinc", source: path.join(currentRepo, "skills", "zeroinc") }],
       },
     );
 
-    expect(await fs.realpath(path.join(skillsHome, "paperclip"))).toBe(
-      await fs.realpath(path.join(currentRepo, "skills", "paperclip")),
+    expect(await fs.realpath(path.join(skillsHome, "zeroinc"))).toBe(
+      await fs.realpath(path.join(currentRepo, "skills", "zeroinc")),
     );
     expect(logs).toContainEqual(
       expect.objectContaining({
         stream: "stdout",
-        chunk: expect.stringContaining('Repaired Codex skill "paperclip"'),
+        chunk: expect.stringContaining('Repaired Codex skill "zeroinc"'),
       }),
     );
   });
 
-  it("preserves a custom Codex skill symlink outside Paperclip repo checkouts", async () => {
-    const currentRepo = await makeTempDir("paperclip-codex-current-");
-    const customRoot = await makeTempDir("paperclip-codex-custom-");
-    const skillsHome = await makeTempDir("paperclip-codex-home-");
+  it("preserves a custom Codex skill symlink outside ZeroInc repo checkouts", async () => {
+    const currentRepo = await makeTempDir("zeroinc-codex-current-");
+    const customRoot = await makeTempDir("zeroinc-codex-custom-");
+    const skillsHome = await makeTempDir("zeroinc-codex-home-");
     cleanupDirs.add(currentRepo);
     cleanupDirs.add(customRoot);
     cleanupDirs.add(skillsHome);
 
-    await createPaperclipRepoSkill(currentRepo, "paperclip");
-    await createCustomSkill(customRoot, "paperclip");
-    await fs.symlink(path.join(customRoot, "custom", "paperclip"), path.join(skillsHome, "paperclip"));
+    await createZeroIncRepoSkill(currentRepo, "zeroinc");
+    await createCustomSkill(customRoot, "zeroinc");
+    await fs.symlink(path.join(customRoot, "custom", "zeroinc"), path.join(skillsHome, "zeroinc"));
 
     await ensureCodexSkillsInjected(async () => {}, {
       skillsHome,
-      skillsEntries: [{ name: "paperclip", source: path.join(currentRepo, "skills", "paperclip") }],
+      skillsEntries: [{ name: "zeroinc", source: path.join(currentRepo, "skills", "zeroinc") }],
     });
 
-    expect(await fs.realpath(path.join(skillsHome, "paperclip"))).toBe(
-      await fs.realpath(path.join(customRoot, "custom", "paperclip")),
+    expect(await fs.realpath(path.join(skillsHome, "zeroinc"))).toBe(
+      await fs.realpath(path.join(customRoot, "custom", "zeroinc")),
     );
   });
 });

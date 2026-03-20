@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "name": "Paperclip",
+  "name": "ZeroInc",
   "description": "The control plane for autonomous AI companies",
   "theme": "mint",
   "colors": {
@@ -16,7 +16,7 @@
   "topbarLinks": [
     {
       "name": "GitHub",
-      "url": "https://github.com/paperclip-ai/paperclip"
+      "url": "https://github.com/zeroinc-ai/zeroinc"
     }
   ],
   "navigation": {
@@ -27,7 +27,7 @@
           {
             "group": "Introduction",
             "pages": [
-              "start/what-is-paperclip",
+              "start/what-is-zeroinc",
               "start/quickstart",
               "start/core-concepts",
               "start/architecture"
@@ -137,6 +137,6 @@
     ]
   },
   "footerSocials": {
-    "github": "https://github.com/paperclip-ai/paperclip"
+    "github": "https://github.com/zeroinc-ai/zeroinc"
   }
 }

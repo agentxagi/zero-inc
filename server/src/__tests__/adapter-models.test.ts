@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { models as codexFallbackModels } from "@paperclipai/adapter-codex-local";
-import { models as cursorFallbackModels } from "@paperclipai/adapter-cursor-local";
-import { resetOpenCodeModelsCacheForTests } from "@paperclipai/adapter-opencode-local/server";
+import { models as codexFallbackModels } from "@zeroinc/adapter-codex-local";
+import { models as cursorFallbackModels } from "@zeroinc/adapter-cursor-local";
+import { resetOpenCodeModelsCacheForTests } from "@zeroinc/adapter-opencode-local/server";
 import { listAdapterModels } from "../adapters/index.js";
 import { resetCodexModelsCacheForTests } from "../adapters/codex-models.js";
 import { resetCursorModelsCacheForTests, setCursorModelsRunnerForTests } from "../adapters/cursor-models.js";
@@ -96,7 +96,7 @@ describe("adapter model listing", () => {
   });
 
   it("returns no opencode models when opencode command is unavailable", async () => {
-    process.env.PAPERCLIP_OPENCODE_COMMAND = "__paperclip_missing_opencode_command__";
+    process.env.PAPERCLIP_OPENCODE_COMMAND = "__zeroinc_missing_opencode_command__";
 
     const models = await listAdapterModels("opencode_local");
     expect(models).toEqual([]);

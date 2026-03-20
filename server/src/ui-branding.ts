@@ -182,10 +182,10 @@ export function renderRuntimeBrandingMeta(branding: WorktreeUiBranding): string 
   if (!branding.enabled || !branding.name || !branding.color || !branding.textColor) return "";
 
   return [
-    '<meta name="paperclip-worktree-enabled" content="true" />',
-    `<meta name="paperclip-worktree-name" content="${escapeHtmlAttribute(branding.name)}" />`,
-    `<meta name="paperclip-worktree-color" content="${escapeHtmlAttribute(branding.color)}" />`,
-    `<meta name="paperclip-worktree-text-color" content="${escapeHtmlAttribute(branding.textColor)}" />`,
+    '<meta name="zeroinc-worktree-enabled" content="true" />',
+    `<meta name="zeroinc-worktree-name" content="${escapeHtmlAttribute(branding.name)}" />`,
+    `<meta name="zeroinc-worktree-color" content="${escapeHtmlAttribute(branding.color)}" />`,
+    `<meta name="zeroinc-worktree-text-color" content="${escapeHtmlAttribute(branding.textColor)}" />`,
   ].join("\n");
 }
 

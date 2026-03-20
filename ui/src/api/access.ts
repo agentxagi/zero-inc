@@ -1,4 +1,4 @@
-import type { AgentAdapterType, JoinRequest } from "@paperclipai/shared";
+import type { AgentAdapterType, JoinRequest } from "@zeroinc/shared";
 import { api } from "./client";
 
 type InviteSummary = {

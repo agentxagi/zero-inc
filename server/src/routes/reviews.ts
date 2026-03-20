@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
-import type { Db } from "@paperclipai/db";
-import { submitReviewSchema } from "@paperclipai/shared";
+import type { Db } from "@zeroinc/db";
+import { submitReviewSchema } from "@zeroinc/shared";
 import { reviewPipelineService } from "../services/review-pipeline.js";
 import { validate } from "../middleware/validate.js";
 import { issueService } from "../services/index.js";

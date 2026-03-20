@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiRequestError, PaperclipApiClient } from "../client/http.js";
+import { ApiRequestError, ZeroIncApiClient } from "../client/http.js";
 
-describe("PaperclipApiClient", () => {
+describe("ZeroIncApiClient", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -12,7 +12,7 @@ describe("PaperclipApiClient", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const client = new PaperclipApiClient({
+    const client = new ZeroIncApiClient({
       apiBase: "http://localhost:3100",
       apiKey: "token-123",
       runId: "run-abc",
@@ -26,7 +26,7 @@ describe("PaperclipApiClient", () => {
 
     const headers = call[1].headers as Record<string, string>;
     expect(headers.authorization).toBe("Bearer token-123");
-    expect(headers["x-paperclip-run-id"]).toBe("run-abc");
+    expect(headers["x-zeroinc-run-id"]).toBe("run-abc");
     expect(headers["content-type"]).toBe("application/json");
   });
 
@@ -36,7 +36,7 @@ describe("PaperclipApiClient", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const client = new PaperclipApiClient({ apiBase: "http://localhost:3100" });
+    const client = new ZeroIncApiClient({ apiBase: "http://localhost:3100" });
     const result = await client.get("/api/missing", { ignoreNotFound: true });
     expect(result).toBeNull();
   });
@@ -50,7 +50,7 @@ describe("PaperclipApiClient", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const client = new PaperclipApiClient({ apiBase: "http://localhost:3100" });
+    const client = new ZeroIncApiClient({ apiBase: "http://localhost:3100" });
 
     await expect(client.post("/api/issues/1/checkout", {})).rejects.toMatchObject({
       status: 409,

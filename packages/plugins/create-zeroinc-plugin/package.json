@@ -1,19 +1,19 @@
 {
-  "name": "@paperclipai/create-paperclip-plugin",
+  "name": "@zeroinc/create-zeroinc-plugin",
   "version": "0.1.0",
   "license": "MIT",
-  "homepage": "https://github.com/paperclipai/paperclip",
+  "homepage": "https://github.com/agentxagi/zero-inc",
   "bugs": {
-    "url": "https://github.com/paperclipai/paperclip/issues"
+    "url": "https://github.com/agentxagi/zero-inc/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/paperclipai/paperclip",
-    "directory": "packages/plugins/create-paperclip-plugin"
+    "url": "https://github.com/agentxagi/zero-inc",
+    "directory": "packages/plugins/create-zeroinc-plugin"
   },
   "type": "module",
   "bin": {
-    "create-paperclip-plugin": "./dist/index.js"
+    "create-zeroinc-plugin": "./dist/index.js"
   },
   "exports": {
     ".": "./src/index.ts"
@@ -21,7 +21,7 @@
   "publishConfig": {
     "access": "public",
     "bin": {
-      "create-paperclip-plugin": "./dist/index.js"
+      "create-zeroinc-plugin": "./dist/index.js"
     },
     "exports": {
       ".": {
@@ -41,7 +41,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@paperclipai/plugin-sdk": "workspace:*"
+    "@zeroinc/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.6.0",

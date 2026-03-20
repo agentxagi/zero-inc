@@ -4,13 +4,13 @@ import type {
   HeartbeatRun,
   Issue,
   JoinRequest,
-} from "@paperclipai/shared";
+} from "@zeroinc/shared";
 
 export const RECENT_ISSUES_LIMIT = 100;
 export const FAILED_RUN_STATUSES = new Set(["failed", "timed_out"]);
 export const ACTIONABLE_APPROVAL_STATUSES = new Set(["pending", "revision_requested"]);
-export const DISMISSED_KEY = "paperclip:inbox:dismissed";
-export const INBOX_LAST_TAB_KEY = "paperclip:inbox:last-tab";
+export const DISMISSED_KEY = "zeroinc:inbox:dismissed";
+export const INBOX_LAST_TAB_KEY = "zeroinc:inbox:last-tab";
 export type InboxTab = "recent" | "unread" | "all";
 export type InboxApprovalFilter = "all" | "actionable" | "resolved";
 export type InboxWorkItem =

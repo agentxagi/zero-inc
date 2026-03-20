@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { testEnvironment } from "@paperclipai/adapter-codex-local/server";
+import { testEnvironment } from "@zeroinc/adapter-codex-local/server";
 
 const itWindows = process.platform === "win32" ? it : it.skip;
 
@@ -10,7 +10,7 @@ describe("codex_local environment diagnostics", () => {
   it("creates a missing working directory when cwd is absolute", async () => {
     const cwd = path.join(
       os.tmpdir(),
-      `paperclip-codex-local-cwd-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      `zeroinc-codex-local-cwd-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       "workspace",
     );
 
@@ -35,7 +35,7 @@ describe("codex_local environment diagnostics", () => {
   itWindows("runs the hello probe when Codex is available via a Windows .cmd wrapper", async () => {
     const root = path.join(
       os.tmpdir(),
-      `paperclip-codex-local-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      `zeroinc-codex-local-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     );
     const binDir = path.join(root, "bin");
     const cwd = path.join(root, "workspace");

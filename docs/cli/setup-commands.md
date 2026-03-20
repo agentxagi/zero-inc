@@ -5,32 +5,32 @@ summary: Onboard, run, doctor, and configure
 
 Instance setup and diagnostics commands.
 
-## `paperclipai run`
+## `zeroinc run`
 
 One-command bootstrap and start:
 
 ```sh
-pnpm paperclipai run
+pnpm zeroinc run
 ```
 
 Does:
 
 1. Auto-onboards if config is missing
-2. Runs `paperclipai doctor` with repair enabled
+2. Runs `zeroinc doctor` with repair enabled
 3. Starts the server when checks pass
 
 Choose a specific instance:
 
 ```sh
-pnpm paperclipai run --instance dev
+pnpm zeroinc run --instance dev
 ```
 
-## `paperclipai onboard`
+## `zeroinc onboard`
 
 Interactive first-time setup:
 
 ```sh
-pnpm paperclipai onboard
+pnpm zeroinc onboard
 ```
 
 First prompt:
@@ -41,22 +41,22 @@ First prompt:
 Start immediately after onboarding:
 
 ```sh
-pnpm paperclipai onboard --run
+pnpm zeroinc onboard --run
 ```
 
 Non-interactive defaults + immediate start (opens browser on server listen):
 
 ```sh
-pnpm paperclipai onboard --yes
+pnpm zeroinc onboard --yes
 ```
 
-## `paperclipai doctor`
+## `zeroinc doctor`
 
 Health checks with optional auto-repair:
 
 ```sh
-pnpm paperclipai doctor
-pnpm paperclipai doctor --repair
+pnpm zeroinc doctor
+pnpm zeroinc doctor --repair
 ```
 
 Validates:
@@ -67,51 +67,51 @@ Validates:
 - Storage configuration
 - Missing key files
 
-## `paperclipai configure`
+## `zeroinc configure`
 
 Update configuration sections:
 
 ```sh
-pnpm paperclipai configure --section server
-pnpm paperclipai configure --section secrets
-pnpm paperclipai configure --section storage
+pnpm zeroinc configure --section server
+pnpm zeroinc configure --section secrets
+pnpm zeroinc configure --section storage
 ```
 
-## `paperclipai env`
+## `zeroinc env`
 
 Show resolved environment configuration:
 
 ```sh
-pnpm paperclipai env
+pnpm zeroinc env
 ```
 
-## `paperclipai allowed-hostname`
+## `zeroinc allowed-hostname`
 
 Allow a private hostname for authenticated/private mode:
 
 ```sh
-pnpm paperclipai allowed-hostname my-tailscale-host
+pnpm zeroinc allowed-hostname my-tailscale-host
 ```
 
 ## Local Storage Paths
 
 | Data | Default Path |
 |------|-------------|
-| Config | `~/.paperclip/instances/default/config.json` |
-| Database | `~/.paperclip/instances/default/db` |
-| Logs | `~/.paperclip/instances/default/logs` |
-| Storage | `~/.paperclip/instances/default/data/storage` |
-| Secrets key | `~/.paperclip/instances/default/secrets/master.key` |
+| Config | `~/.zeroinc/instances/default/config.json` |
+| Database | `~/.zeroinc/instances/default/db` |
+| Logs | `~/.zeroinc/instances/default/logs` |
+| Storage | `~/.zeroinc/instances/default/data/storage` |
+| Secrets key | `~/.zeroinc/instances/default/secrets/master.key` |
 
 Override with:
 
 ```sh
-PAPERCLIP_HOME=/custom/home PAPERCLIP_INSTANCE_ID=dev pnpm paperclipai run
+PAPERCLIP_HOME=/custom/home PAPERCLIP_INSTANCE_ID=dev pnpm zeroinc run
 ```
 
 Or pass `--data-dir` directly on any command:
 
 ```sh
-pnpm paperclipai run --data-dir ./tmp/paperclip-dev
-pnpm paperclipai doctor --data-dir ./tmp/paperclip-dev
+pnpm zeroinc run --data-dir ./tmp/zeroinc-dev
+pnpm zeroinc doctor --data-dir ./tmp/zeroinc-dev
 ```

@@ -3,7 +3,7 @@ import type {
   AdapterEnvironmentCheck,
   AdapterEnvironmentTestContext,
   AdapterEnvironmentTestResult,
-} from "@paperclipai/adapter-utils";
+} from "@zeroinc/adapter-utils";
 import {
   asBoolean,
   asString,
@@ -13,7 +13,7 @@ import {
   ensurePathInEnv,
   parseObject,
   runChildProcess,
-} from "@paperclipai/adapter-utils/server-utils";
+} from "@zeroinc/adapter-utils/server-utils";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "../index.js";
 import { detectGeminiAuthRequired, parseGeminiJsonl } from "./parse.js";
 import { firstNonEmptyLine } from "./utils.js";

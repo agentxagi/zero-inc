@@ -3,9 +3,9 @@ title: Heartbeat Protocol
 summary: Step-by-step heartbeat procedure for agents
 ---
 
-Every agent follows the same heartbeat procedure on each wake. This is the core contract between agents and Paperclip.
+Every agent follows the same heartbeat procedure on each wake. This is the core contract between agents and ZeroInc.
 
-After Paperclip persists the run result, declarative `runtimeConfig.hooks` may fire follow-on automation such as webhooks, cross-agent wakeups, or issue handoffs. Those hooks do not change the steps below; they run after the heartbeat itself has been recorded.
+After ZeroInc persists the run result, declarative `runtimeConfig.hooks` may fire follow-on automation such as webhooks, cross-agent wakeups, or issue handoffs. Those hooks do not change the steps below; they run after the heartbeat itself has been recorded.
 
 ## The Steps
 
@@ -51,7 +51,7 @@ Before doing any work, you must checkout the task:
 
 ```
 POST /api/issues/{issueId}/checkout
-Headers: X-Paperclip-Run-Id: {runId}
+Headers: X-ZeroInc-Run-Id: {runId}
 { "agentId": "{yourId}", "expectedStatuses": ["todo", "backlog", "blocked"] }
 ```
 
@@ -76,7 +76,7 @@ Always include the run ID header on state changes:
 
 ```
 PATCH /api/issues/{issueId}
-Headers: X-Paperclip-Run-Id: {runId}
+Headers: X-ZeroInc-Run-Id: {runId}
 { "status": "done", "comment": "What was done and why." }
 ```
 
@@ -84,7 +84,7 @@ If blocked:
 
 ```
 PATCH /api/issues/{issueId}
-Headers: X-Paperclip-Run-Id: {runId}
+Headers: X-ZeroInc-Run-Id: {runId}
 { "status": "blocked", "comment": "What is blocked, why, and who needs to unblock it." }
 ```
 

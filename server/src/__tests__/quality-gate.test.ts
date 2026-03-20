@@ -4,8 +4,8 @@ import {
   calculateScore,
   getQualityState,
 } from "../services/quality-gate.ts";
-import { DEFAULT_QUALITY_GATE_CONFIG } from "@paperclipai/shared";
-import { issueComments, agents } from "@paperclipai/db";
+import { DEFAULT_QUALITY_GATE_CONFIG } from "@zeroinc/shared";
+import { issueComments, agents } from "@zeroinc/db";
 
 // ---------------------------------------------------------------------------
 // Mock DB — routes queries by table reference

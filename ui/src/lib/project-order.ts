@@ -1,7 +1,7 @@
-import type { Project } from "@paperclipai/shared";
+import type { Project } from "@zeroinc/shared";
 
-export const PROJECT_ORDER_UPDATED_EVENT = "paperclip:project-order-updated";
-const PROJECT_ORDER_STORAGE_PREFIX = "paperclip.projectOrder";
+export const PROJECT_ORDER_UPDATED_EVENT = "zeroinc:project-order-updated";
+const PROJECT_ORDER_STORAGE_PREFIX = "zeroinc.projectOrder";
 const ANONYMOUS_USER_ID = "anonymous";
 
 type ProjectOrderUpdatedDetail = {

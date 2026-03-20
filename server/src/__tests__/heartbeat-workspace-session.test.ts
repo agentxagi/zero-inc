@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { agents } from "@paperclipai/db";
+import type { agents } from "@zeroinc/db";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 import {
   formatRuntimeWorkspaceWarningLog,
@@ -186,7 +186,7 @@ describe("formatRuntimeWorkspaceWarningLog", () => {
   it("emits informational workspace warnings on stdout", () => {
     expect(formatRuntimeWorkspaceWarningLog("Using fallback workspace")).toEqual({
       stream: "stdout",
-      chunk: "[paperclip] Using fallback workspace\n",
+      chunk: "[zeroinc] Using fallback workspace\n",
     });
   });
 });
@@ -228,7 +228,7 @@ describe("prioritizeProjectWorkspaceCandidatesForRun", () => {
 });
 
 describe("parseSessionCompactionPolicy", () => {
-  it("disables Paperclip-managed rotation by default for codex and claude local", () => {
+  it("disables ZeroInc-managed rotation by default for codex and claude local", () => {
     expect(parseSessionCompactionPolicy(buildAgent("codex_local"))).toEqual({
       enabled: true,
       maxSessionRuns: 0,

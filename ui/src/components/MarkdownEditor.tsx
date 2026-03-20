@@ -27,7 +27,7 @@ import {
   thematicBreakPlugin,
   type RealmPlugin,
 } from "@mdxeditor/editor";
-import { buildProjectMentionHref, parseProjectMentionHref } from "@paperclipai/shared";
+import { buildProjectMentionHref, parseProjectMentionHref } from "@zeroinc/shared";
 import { cn } from "../lib/utils";
 
 /* ---- Mention types ---- */
@@ -319,7 +319,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
       if (!parsed) {
         if (link.dataset.projectMention === "true") {
           link.dataset.projectMention = "false";
-          link.classList.remove("paperclip-project-mention-chip");
+          link.classList.remove("zeroinc-project-mention-chip");
           link.removeAttribute("contenteditable");
           link.style.removeProperty("border-color");
           link.style.removeProperty("background-color");
@@ -330,7 +330,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
 
       const color = parsed.color ?? projectColorById.get(parsed.projectId) ?? null;
       link.dataset.projectMention = "true";
-      link.classList.add("paperclip-project-mention-chip");
+      link.classList.add("zeroinc-project-mention-chip");
       link.setAttribute("contenteditable", "false");
       const style = mentionChipStyle(color);
       if (style) {
@@ -501,7 +501,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
     <div
       ref={containerRef}
       className={cn(
-        "relative paperclip-mdxeditor-scope",
+        "relative zeroinc-mdxeditor-scope",
         bordered ? "rounded-md border border-border bg-transparent" : "bg-transparent",
         isDragOver && "ring-1 ring-primary/60 bg-accent/20",
         className,
@@ -583,9 +583,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
           onChange(next);
         }}
         onBlur={() => onBlur?.()}
-        className={cn("paperclip-mdxeditor", !bordered && "paperclip-mdxeditor--borderless")}
+        className={cn("zeroinc-mdxeditor", !bordered && "zeroinc-mdxeditor--borderless")}
         contentEditableClassName={cn(
-          "paperclip-mdxeditor-content focus:outline-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:list-item",
+          "zeroinc-mdxeditor-content focus:outline-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:list-item",
           contentClassName,
         )}
         plugins={plugins}

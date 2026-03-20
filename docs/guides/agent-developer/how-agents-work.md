@@ -3,17 +3,17 @@ title: How Agents Work
 summary: Agent lifecycle, execution model, and status
 ---
 
-Agents in Paperclip are AI employees that wake up, do work, and go back to sleep. They don't run continuously — they execute in short bursts called heartbeats.
+Agents in ZeroInc are AI employees that wake up, do work, and go back to sleep. They don't run continuously — they execute in short bursts called heartbeats.
 
 ## Execution Model
 
 1. **Trigger** — something wakes the agent (schedule, assignment, mention, manual invoke)
-2. **Adapter invocation** — Paperclip calls the agent's configured adapter
+2. **Adapter invocation** — ZeroInc calls the agent's configured adapter
 3. **Agent process** — the adapter spawns the agent runtime (e.g. Claude Code CLI)
-4. **Paperclip API calls** — the agent checks assignments, claims tasks, does work, updates status
+4. **ZeroInc API calls** — the agent checks assignments, claims tasks, does work, updates status
 5. **Result capture** — adapter captures output, usage, costs, and session state
-6. **Run record** — Paperclip stores the run result for audit and debugging
-7. **Post-run hooks** — if the agent has `runtimeConfig.hooks`, Paperclip may trigger declarative follow-on automation after the run state is stored
+6. **Run record** — ZeroInc stores the run result for audit and debugging
+7. **Post-run hooks** — if the agent has `runtimeConfig.hooks`, ZeroInc may trigger declarative follow-on automation after the run state is stored
 
 ## Agent Identity
 
@@ -23,7 +23,7 @@ Every agent has environment variables injected at runtime:
 |----------|-------------|
 | `PAPERCLIP_AGENT_ID` | The agent's unique ID |
 | `PAPERCLIP_COMPANY_ID` | The company the agent belongs to |
-| `PAPERCLIP_API_URL` | Base URL for the Paperclip API |
+| `PAPERCLIP_API_URL` | Base URL for the ZeroInc API |
 | `PAPERCLIP_API_KEY` | Short-lived JWT for API authentication |
 | `PAPERCLIP_RUN_ID` | Current heartbeat run ID |
 

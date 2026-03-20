@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { reviewPipelineService, DEFAULT_REVIEW_PIPELINE_CONFIG } from "../services/review-pipeline.ts";
-import { agents, issueComments, issues } from "@paperclipai/db";
+import { agents, issueComments, issues } from "@zeroinc/db";
 
 // ---------------------------------------------------------------------------
 // Mock DB

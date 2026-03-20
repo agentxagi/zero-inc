@@ -1,8 +1,8 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { and, eq } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { agents, issues } from "@paperclipai/db";
+import type { Db } from "@zeroinc/db";
+import { agents, issues } from "@zeroinc/db";
 import {
   agentHooksConfigSchema,
   normalizeAgentUrlKey,
@@ -14,8 +14,8 @@ import {
   type AgentHookWebhookAction,
   type AgentHookWakeAgentAction,
   type IssueStatus,
-} from "@paperclipai/shared";
-import { buildPaperclipEnv, renderTemplate } from "../adapters/utils.js";
+} from "@zeroinc/shared";
+import { buildZeroIncEnv, renderTemplate } from "../adapters/utils.js";
 import { logger } from "../middleware/logger.js";
 import { logActivity } from "./activity-log.js";
 import { issueService } from "./issues.js";
@@ -301,7 +301,7 @@ async function executeCommandAction(
 ) {
   const rendered: AgentHookCommandAction = renderTemplateValue(action, templateData);
   const env = {
-    ...buildPaperclipEnv({ id: sourceAgent.id, companyId: sourceAgent.companyId }),
+    ...buildZeroIncEnv({ id: sourceAgent.id, companyId: sourceAgent.companyId }),
     PAPERCLIP_HOOK_EVENT: event.eventType,
     PAPERCLIP_HOOK_RUN_ID: event.run.id,
     ...(rendered.env ?? {}),

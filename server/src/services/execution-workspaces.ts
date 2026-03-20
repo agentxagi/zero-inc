@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { executionWorkspaces } from "@paperclipai/db";
-import type { ExecutionWorkspace } from "@paperclipai/shared";
+import type { Db } from "@zeroinc/db";
+import { executionWorkspaces } from "@zeroinc/db";
+import type { ExecutionWorkspace } from "@zeroinc/shared";
 
 type ExecutionWorkspaceRow = typeof executionWorkspaces.$inferSelect;
 

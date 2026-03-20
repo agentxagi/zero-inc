@@ -2,7 +2,7 @@ import pc from "picocolors";
 import type { Command } from "commander";
 import { readConfig } from "../../config/store.js";
 import { readContext, resolveProfile, type ClientContextProfile } from "../../client/context.js";
-import { ApiRequestError, PaperclipApiClient } from "../../client/http.js";
+import { ApiRequestError, ZeroIncApiClient } from "../../client/http.js";
 
 export interface BaseClientOptions {
   config?: string;
@@ -16,7 +16,7 @@ export interface BaseClientOptions {
 }
 
 export interface ResolvedClientContext {
-  api: PaperclipApiClient;
+  api: ZeroIncApiClient;
   companyId?: string;
   profileName: string;
   profile: ClientContextProfile;
@@ -25,11 +25,11 @@ export interface ResolvedClientContext {
 
 export function addCommonClientOptions(command: Command, opts?: { includeCompany?: boolean }): Command {
   command
-    .option("-c, --config <path>", "Path to Paperclip config file")
-    .option("-d, --data-dir <path>", "Paperclip data directory root (isolates state from ~/.paperclip)")
+    .option("-c, --config <path>", "Path to ZeroInc config file")
+    .option("-d, --data-dir <path>", "ZeroInc data directory root (isolates state from ~/.zeroinc)")
     .option("--context <path>", "Path to CLI context file")
     .option("--profile <name>", "CLI context profile name")
-    .option("--api-base <url>", "Base URL for the Paperclip API")
+    .option("--api-base <url>", "Base URL for the ZeroInc API")
     .option("--api-key <token>", "Bearer token for agent-authenticated calls")
     .option("--json", "Output raw JSON");
 
@@ -65,11 +65,11 @@ export function resolveCommandContext(
 
   if (opts?.requireCompany && !companyId) {
     throw new Error(
-      "Company ID is required. Pass --company-id, set PAPERCLIP_COMPANY_ID, or set context profile companyId via `paperclipai context set`.",
+      "Company ID is required. Pass --company-id, set PAPERCLIP_COMPANY_ID, or set context profile companyId via `zeroinc context set`.",
     );
   }
 
-  const api = new PaperclipApiClient({ apiBase, apiKey });
+  const api = new ZeroIncApiClient({ apiBase, apiKey });
   return {
     api,
     companyId,

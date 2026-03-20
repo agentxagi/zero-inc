@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
-import { execute, testEnvironment } from "@paperclipai/adapter-openclaw-gateway/server";
+import { execute, testEnvironment } from "@zeroinc/adapter-openclaw-gateway/server";
 import {
   buildOpenClawGatewayConfig,
   parseOpenClawGatewayStdoutLine,
-} from "@paperclipai/adapter-openclaw-gateway/ui";
-import type { AdapterExecutionContext } from "@paperclipai/adapter-utils";
+} from "@zeroinc/adapter-openclaw-gateway/ui";
+import type { AdapterExecutionContext } from "@zeroinc/adapter-utils";
 
 function buildContext(
   config: Record<string, unknown>,
@@ -422,18 +422,18 @@ describe("openclaw gateway adapter execute", () => {
               issueId: "issue-123",
               wakeReason: "issue_assigned",
               issueIds: ["issue-123"],
-              paperclipWorkspace: {
+              zeroincWorkspace: {
                 cwd: "/tmp/worktrees/pap-123",
                 strategy: "git_worktree",
                 branchName: "pap-123-test",
               },
-              paperclipWorkspaces: [
+              zeroincWorkspaces: [
                 {
                   id: "workspace-1",
                   cwd: "/tmp/project",
                 },
               ],
-              paperclipRuntimeServiceIntents: [
+              zeroincRuntimeServiceIntents: [
                 {
                   name: "preview",
                   lifecycle: "ephemeral",
@@ -452,7 +452,7 @@ describe("openclaw gateway adapter execute", () => {
       const payload = gateway.getAgentPayload();
       expect(payload).toBeTruthy();
       expect(payload?.idempotencyKey).toBe("run-123");
-      expect(payload?.sessionKey).toBe("paperclip:issue:issue-123");
+      expect(payload?.sessionKey).toBe("zeroinc:issue:issue-123");
       expect(String(payload?.message ?? "")).toContain("wake now");
       expect(String(payload?.message ?? "")).toContain("PAPERCLIP_RUN_ID=run-123");
       expect(String(payload?.message ?? "")).toContain("PAPERCLIP_TASK_ID=task-123");

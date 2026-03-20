@@ -1,6 +1,6 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import type { PaperclipConfig } from "../config/schema.js";
+import type { ZeroIncConfig } from "../config/schema.js";
 import { configExists, readConfig, resolveConfigPath } from "../config/store.js";
 import {
   readAgentJwtSecretFromEnv,
@@ -10,7 +10,7 @@ import {
 import {
   resolveDefaultSecretsKeyFilePath,
   resolveDefaultStorageDir,
-  resolvePaperclipInstanceId,
+  resolveZeroIncInstanceId,
 } from "../config/home.js";
 
 type EnvSource = "env" | "config" | "file" | "default" | "missing";
@@ -24,23 +24,23 @@ type EnvVarRow = {
 };
 
 const DEFAULT_AGENT_JWT_TTL_SECONDS = "172800";
-const DEFAULT_AGENT_JWT_ISSUER = "paperclip";
-const DEFAULT_AGENT_JWT_AUDIENCE = "paperclip-api";
+const DEFAULT_AGENT_JWT_ISSUER = "zeroinc";
+const DEFAULT_AGENT_JWT_AUDIENCE = "zeroinc-api";
 const DEFAULT_HEARTBEAT_SCHEDULER_INTERVAL_MS = "30000";
 const DEFAULT_SECRETS_PROVIDER = "local_encrypted";
 const DEFAULT_STORAGE_PROVIDER = "local_disk";
 function defaultSecretsKeyFilePath(): string {
-  return resolveDefaultSecretsKeyFilePath(resolvePaperclipInstanceId());
+  return resolveDefaultSecretsKeyFilePath(resolveZeroIncInstanceId());
 }
 function defaultStorageBaseDir(): string {
-  return resolveDefaultStorageDir(resolvePaperclipInstanceId());
+  return resolveDefaultStorageDir(resolveZeroIncInstanceId());
 }
 
 export async function envCommand(opts: { config?: string }): Promise<void> {
-  p.intro(pc.bgCyan(pc.black(" paperclip env ")));
+  p.intro(pc.bgCyan(pc.black(" zeroinc env ")));
 
   const configPath = resolveConfigPath(opts.config);
-  let config: PaperclipConfig | null = null;
+  let config: ZeroIncConfig | null = null;
   let configReadError: string | null = null;
 
   if (configExists(opts.config)) {
@@ -109,7 +109,7 @@ export async function envCommand(opts: { config?: string }): Promise<void> {
   p.outro("Done");
 }
 
-function collectDeploymentEnvRows(config: PaperclipConfig | null, configPath: string): EnvVarRow[] {
+function collectDeploymentEnvRows(config: ZeroIncConfig | null, configPath: string): EnvVarRow[] {
   const agentJwtEnvFile = resolveAgentJwtEnvFile(configPath);
   const jwtEnv = readAgentJwtSecretFromEnv(configPath);
   const jwtFile = jwtEnv ? null : readAgentJwtSecretFromEnvFile(agentJwtEnvFile);
@@ -166,7 +166,7 @@ function collectDeploymentEnvRows(config: PaperclipConfig | null, configPath: st
   const storageS3Bucket =
     process.env.PAPERCLIP_STORAGE_S3_BUCKET ??
     config?.storage?.s3?.bucket ??
-    "paperclip";
+    "zeroinc";
   const storageS3Region =
     process.env.PAPERCLIP_STORAGE_S3_REGION ??
     config?.storage?.s3?.region ??

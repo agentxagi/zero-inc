@@ -248,7 +248,7 @@ export type {
   PluginLauncherDeclaration,
   PluginMinimumHostVersion,
   PluginUiDeclaration,
-  PaperclipPluginManifestV1,
+  ZeroIncPluginManifestV1,
   PluginRecord,
   PluginStateRecord,
   PluginConfig,
@@ -458,7 +458,7 @@ export {
 } from "./project-mentions.js";
 
 export {
-  paperclipConfigSchema,
+  zeroincConfigSchema,
   configMetaSchema,
   llmConfigSchema,
   databaseBackupConfigSchema,
@@ -471,7 +471,7 @@ export {
   storageLocalDiskConfigSchema,
   storageS3ConfigSchema,
   secretsLocalEncryptedConfigSchema,
-  type PaperclipConfig,
+  type ZeroIncConfig,
   type LlmConfig,
   type DatabaseBackupConfig,
   type DatabaseConfig,

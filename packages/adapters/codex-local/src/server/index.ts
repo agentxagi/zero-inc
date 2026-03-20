@@ -12,7 +12,7 @@ export {
   fetchWithTimeout,
   codexHomeDir,
 } from "./quota.js";
-import type { AdapterSessionCodec } from "@paperclipai/adapter-utils";
+import type { AdapterSessionCodec } from "@zeroinc/adapter-utils";
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;

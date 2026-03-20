@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { testEnvironment } from "@paperclipai/adapter-cursor-local/server";
+import { testEnvironment } from "@zeroinc/adapter-cursor-local/server";
 
 async function writeFakeAgentCommand(binDir: string, argsCapturePath: string): Promise<string> {
   const commandPath = path.join(binDir, "agent");
@@ -31,7 +31,7 @@ describe("cursor environment diagnostics", () => {
   it("creates a missing working directory when cwd is absolute", async () => {
     const cwd = path.join(
       os.tmpdir(),
-      `paperclip-cursor-local-cwd-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      `zeroinc-cursor-local-cwd-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       "workspace",
     );
 
@@ -56,7 +56,7 @@ describe("cursor environment diagnostics", () => {
   it("adds --yolo to hello probe args by default", async () => {
     const root = path.join(
       os.tmpdir(),
-      `paperclip-cursor-local-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      `zeroinc-cursor-local-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     );
     const binDir = path.join(root, "bin");
     const cwd = path.join(root, "workspace");
@@ -87,7 +87,7 @@ describe("cursor environment diagnostics", () => {
   it("does not auto-add --yolo when extraArgs already bypass trust", async () => {
     const root = path.join(
       os.tmpdir(),
-      `paperclip-cursor-local-probe-extra-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      `zeroinc-cursor-local-probe-extra-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     );
     const binDir = path.join(root, "bin");
     const cwd = path.join(root, "workspace");

@@ -1,6 +1,6 @@
 # Release Automation Setup
 
-This document covers the GitHub and npm setup required for the current Paperclip release model:
+This document covers the GitHub and npm setup required for the current ZeroInc release model:
 
 - automatic canaries from `master`
 - manual stable promotion from a chosen source ref
@@ -29,12 +29,12 @@ Required files:
 
 ## 2. Configure npm Trusted Publishing
 
-Do this for every public package that Paperclip publishes.
+Do this for every public package that ZeroInc publishes.
 
 At minimum that includes:
 
-- `paperclipai`
-- `@paperclipai/server`
+- `zeroinc`
+- `@zeroinc/server`
 - public packages under `packages/`
 
 ### 2.1. In npm, open each package settings page
@@ -43,7 +43,7 @@ For each package:
 
 1. open npm as an owner of the package
 2. go to the package settings / publishing access area
-3. add a trusted publisher for the GitHub repository `paperclipai/paperclip`
+3. add a trusted publisher for the GitHub repository `zeroinc/zeroinc`
 
 ### 2.2. Add one trusted publisher entry per package
 
@@ -55,7 +55,7 @@ Configure:
 
 Repository:
 
-- `paperclipai/paperclip`
+- `zeroinc/zeroinc`
 
 Environment name:
 
@@ -82,7 +82,7 @@ Only after that should you remove old token-based access.
 After trusted publishing works:
 
 1. revoke any repository or organization `NPM_TOKEN` secrets used for publish
-2. revoke any personal automation token that used to publish Paperclip
+2. revoke any personal automation token that used to publish ZeroInc
 3. if npm offers a package-level setting to restrict publishing to trusted publishers, enable it
 
 Goal:
@@ -210,7 +210,7 @@ After setup:
 Install-path check:
 
 ```bash
-npx paperclipai@canary onboard
+npx zeroinc@canary onboard
 ```
 
 ## 12. Verify the Stable Workflow

@@ -34,7 +34,7 @@ import { NotFoundPage } from "../pages/NotFound";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
-const INSTANCE_SETTINGS_MEMORY_KEY = "paperclip.lastInstanceSettingsPath";
+const INSTANCE_SETTINGS_MEMORY_KEY = "zeroinc.lastInstanceSettingsPath";
 
 function readRememberedInstanceSettingsPath(): string {
   if (typeof window === "undefined") return DEFAULT_INSTANCE_SETTINGS_PATH;
@@ -290,7 +290,7 @@ export function Layout() {
             <div className="border-t border-r border-border px-3 py-2 bg-background">
               <div className="flex items-center gap-1">
                 <a
-                  href="https://docs.paperclip.ing/"
+                  href="https://docs.zeroinc.ing/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors text-foreground/80 hover:bg-accent/50 hover:text-foreground flex-1 min-w-0"
@@ -348,7 +348,7 @@ export function Layout() {
             <div className="border-t border-r border-border px-3 py-2">
               <div className="flex items-center gap-1">
                 <a
-                  href="https://docs.paperclip.ing/"
+                  href="https://docs.zeroinc.ing/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors text-foreground/80 hover:bg-accent/50 hover:text-foreground flex-1 min-w-0"

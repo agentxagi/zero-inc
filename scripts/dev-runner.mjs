@@ -44,9 +44,9 @@ if (tailscaleAuth) {
   env.PAPERCLIP_DEPLOYMENT_EXPOSURE = "private";
   env.PAPERCLIP_AUTH_BASE_URL_MODE = "auto";
   env.HOST = "0.0.0.0";
-  console.log("[paperclip] dev mode: authenticated/private (tailscale-friendly) on 0.0.0.0");
+  console.log("[zeroinc] dev mode: authenticated/private (tailscale-friendly) on 0.0.0.0");
 } else {
-  console.log("[paperclip] dev mode: local_trusted (default)");
+  console.log("[zeroinc] dev mode: local_trusted (default)");
 }
 
 const pnpmBin = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -120,14 +120,14 @@ async function maybePreflightMigrations() {
   if (mode !== "watch") return;
 
   const status = await runPnpm(
-    ["--filter", "@paperclipai/db", "exec", "tsx", "src/migration-status.ts", "--json"],
+    ["--filter", "@zeroinc/db", "exec", "tsx", "src/migration-status.ts", "--json"],
     { env },
   );
   if (status.code !== 0) {
     process.stderr.write(
       status.stderr ||
         status.stdout ||
-        `[paperclip] Command failed with code ${status.code}: pnpm --filter @paperclipai/db exec tsx src/migration-status.ts --json\n`,
+        `[zeroinc] Command failed with code ${status.code}: pnpm --filter @zeroinc/db exec tsx src/migration-status.ts --json\n`,
     );
     process.exit(status.code);
   }
@@ -139,7 +139,7 @@ async function maybePreflightMigrations() {
     process.stderr.write(
       status.stderr ||
         status.stdout ||
-        "[paperclip] migration-status returned invalid JSON payload\n",
+        "[zeroinc] migration-status returned invalid JSON payload\n",
     );
     throw toError(error, "Unable to parse migration-status JSON output");
   }
@@ -173,7 +173,7 @@ async function maybePreflightMigrations() {
 
   if (!shouldApply) {
     process.stderr.write(
-      `[paperclip] Pending migrations detected (${formatPendingMigrationSummary(payload.pendingMigrations)}). ` +
+      `[zeroinc] Pending migrations detected (${formatPendingMigrationSummary(payload.pendingMigrations)}). ` +
         "Refusing to start watch mode against a stale schema.\n",
     );
     process.exit(1);
@@ -199,9 +199,9 @@ async function maybePreflightMigrations() {
 await maybePreflightMigrations();
 
 async function buildPluginSdk() {
-  console.log("[paperclip] building plugin sdk...");
+  console.log("[zeroinc] building plugin sdk...");
   const result = await runPnpm(
-    ["--filter", "@paperclipai/plugin-sdk", "build"],
+    ["--filter", "@zeroinc/plugin-sdk", "build"],
     { stdio: "inherit" },
   );
   if (result.signal) {
@@ -209,7 +209,7 @@ async function buildPluginSdk() {
     return;
   }
   if (result.code !== 0) {
-    console.error("[paperclip] plugin sdk build failed");
+    console.error("[zeroinc] plugin sdk build failed");
     process.exit(result.code);
   }
 }
@@ -219,7 +219,7 @@ await buildPluginSdk();
 const serverScript = mode === "watch" ? "dev:watch" : "dev";
 const child = spawn(
   pnpmBin,
-  ["--filter", "@paperclipai/server", serverScript, ...forwardedArgs],
+  ["--filter", "@zeroinc/server", serverScript, ...forwardedArgs],
   { stdio: "inherit", env, shell: process.platform === "win32" },
 );
 

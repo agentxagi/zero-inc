@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { testEnvironment } from "@paperclipai/adapter-gemini-local/server";
+import { testEnvironment } from "@zeroinc/adapter-gemini-local/server";
 
 async function writeFakeGeminiCommand(binDir: string, argsCapturePath: string): Promise<string> {
   const commandPath = path.join(binDir, "gemini");
@@ -31,7 +31,7 @@ describe("gemini_local environment diagnostics", () => {
   it("creates a missing working directory when cwd is absolute", async () => {
     const cwd = path.join(
       os.tmpdir(),
-      `paperclip-gemini-local-cwd-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      `zeroinc-gemini-local-cwd-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       "workspace",
     );
 
@@ -56,7 +56,7 @@ describe("gemini_local environment diagnostics", () => {
   it("passes model and yolo flags to the hello probe", async () => {
     const root = path.join(
       os.tmpdir(),
-      `paperclip-gemini-local-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      `zeroinc-gemini-local-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     );
     const binDir = path.join(root, "bin");
     const cwd = path.join(root, "workspace");

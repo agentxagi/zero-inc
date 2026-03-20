@@ -1,7 +1,7 @@
 import { isValidElement, useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { parseProjectMentionHref } from "@paperclipai/shared";
+import { parseProjectMentionHref } from "@zeroinc/shared";
 import { cn } from "../lib/utils";
 import { useTheme } from "../context/ThemeContext";
 
@@ -76,7 +76,7 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
           fontFamily: "inherit",
           suppressErrorRendering: true,
         });
-        const rendered = await mermaid.render(`paperclip-mermaid-${renderId}`, source);
+        const rendered = await mermaid.render(`zeroinc-mermaid-${renderId}`, source);
         if (!active) return;
         setSvg(rendered.svg);
       })
@@ -95,15 +95,15 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
   }, [darkMode, renderId, source]);
 
   return (
-    <div className="paperclip-mermaid">
+    <div className="zeroinc-mermaid">
       {svg ? (
         <div dangerouslySetInnerHTML={{ __html: svg }} />
       ) : (
         <>
-          <p className={cn("paperclip-mermaid-status", error && "paperclip-mermaid-status-error")}>
+          <p className={cn("zeroinc-mermaid-status", error && "zeroinc-mermaid-status-error")}>
             {error ? `Unable to render Mermaid diagram: ${error}` : "Rendering Mermaid diagram..."}
           </p>
-          <pre className="paperclip-mermaid-source">
+          <pre className="zeroinc-mermaid-source">
             <code className="language-mermaid">{source}</code>
           </pre>
         </>
@@ -117,7 +117,7 @@ export function MarkdownBody({ children, className }: MarkdownBodyProps) {
   return (
     <div
       className={cn(
-        "paperclip-markdown prose prose-sm max-w-none break-words overflow-hidden",
+        "zeroinc-markdown prose prose-sm max-w-none break-words overflow-hidden",
         theme === "dark" && "prose-invert",
         className,
       )}
@@ -139,7 +139,7 @@ export function MarkdownBody({ children, className }: MarkdownBodyProps) {
               return (
                 <a
                   href={`/projects/${parsed.projectId}`}
-                  className="paperclip-project-mention-chip"
+                  className="zeroinc-project-mention-chip"
                   style={mentionChipStyle(parsed.color)}
                 >
                   {label}

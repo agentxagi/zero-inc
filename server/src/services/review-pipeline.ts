@@ -1,6 +1,6 @@
 import { and, eq, ne, sql } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { agents, issueComments, issues } from "@paperclipai/db";
+import type { Db } from "@zeroinc/db";
+import { agents, issueComments, issues } from "@zeroinc/db";
 import type { QualityGateResult } from "./quality-gate.js";
 
 // ---------------------------------------------------------------------------

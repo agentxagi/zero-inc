@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { PaperclipConfig } from "../config/schema.js";
+import type { ZeroIncConfig } from "../config/schema.js";
 import type { CheckResult } from "./index.js";
 import { resolveRuntimeLikePath } from "./path-resolver.js";
 
@@ -28,7 +28,7 @@ function decodeMasterKey(raw: string): Buffer | null {
 
 function withStrictModeNote(
   base: Pick<CheckResult, "name" | "status" | "message" | "canRepair" | "repair" | "repairHint">,
-  config: PaperclipConfig,
+  config: ZeroIncConfig,
 ): CheckResult {
   const strictModeDisabledInDeployedSetup =
     config.database.mode === "postgres" && config.secrets.strictMode === false;
@@ -45,7 +45,7 @@ function withStrictModeNote(
   };
 }
 
-export function secretsCheck(config: PaperclipConfig, configPath?: string): CheckResult {
+export function secretsCheck(config: ZeroIncConfig, configPath?: string): CheckResult {
   const provider = config.secrets.provider;
   if (provider !== "local_encrypted") {
     return {
@@ -53,7 +53,7 @@ export function secretsCheck(config: PaperclipConfig, configPath?: string): Chec
       status: "fail",
       message: `${provider} is configured, but this build only supports local_encrypted`,
       canRepair: false,
-      repairHint: "Run `paperclipai configure --section secrets` and set provider to local_encrypted",
+      repairHint: "Run `zeroinc configure --section secrets` and set provider to local_encrypted",
     };
   }
 

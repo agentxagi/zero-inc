@@ -1,16 +1,16 @@
-# ClipHub: Marketplace for Paperclip Team Configurations
+# ClipHub: Marketplace for ZeroInc Team Configurations
 
-> The "app store" for whole-company AI teams — pre-built Paperclip configurations, agent blueprints, skills, and governance templates that ship real work from day one.
+> The "app store" for whole-company AI teams — pre-built ZeroInc configurations, agent blueprints, skills, and governance templates that ship real work from day one.
 
 ## 1. Vision & Positioning
 
-**ClipHub** sells **entire team configurations** — org charts, agent roles, inter-agent workflows, governance rules, and project templates — for Paperclip-managed companies.
+**ClipHub** sells **entire team configurations** — org charts, agent roles, inter-agent workflows, governance rules, and project templates — for ZeroInc-managed companies.
 
 | Dimension | ClipHub |
 |---|---|
 | Unit of sale | Team blueprint (multi-agent org) |
 | Buyer | Founder / team lead spinning up an AI company |
-| Install target | Paperclip company (agents, projects, governance) |
+| Install target | ZeroInc company (agents, projects, governance) |
 | Value prop | "Skip org design — get a shipping team in minutes" |
 | Price range | $0–$499 per blueprint (+ individual add-ons) |
 
@@ -20,7 +20,7 @@
 
 ### 2.1 Team Blueprints (primary product)
 
-A complete Paperclip company configuration:
+A complete ZeroInc company configuration:
 
 - **Org chart**: Agents with roles, titles, reporting chains, capabilities
 - **Agent configs**: Adapter type, model, prompt templates, instructions paths
@@ -36,7 +36,7 @@ A complete Paperclip company configuration:
 
 ### 2.2 Agent Blueprints (individual agents within a team context)
 
-Single-agent configurations designed to plug into a Paperclip org:
+Single-agent configurations designed to plug into a ZeroInc org:
 
 - Role definition, prompt template, adapter config
 - Reporting chain expectations (who they report to)
@@ -50,11 +50,11 @@ Single-agent configurations designed to plug into a Paperclip org:
 
 ### 2.3 Skills (modular capabilities)
 
-Portable skill files that any Paperclip agent can use:
+Portable skill files that any ZeroInc agent can use:
 
 - Markdown skill files with instructions
 - Tool configurations and shell scripts
-- Compatible with Paperclip's skill loading system
+- Compatible with ZeroInc's skill loading system
 
 **Examples:**
 - "Git PR Workflow" — standardized PR creation and review (Free)
@@ -111,7 +111,7 @@ interface Listing {
   // Compatibility
   compatibleAdapters: string[];    // ['claude_local', 'codex_local', ...]
   requiredModels: string[];        // ['claude-opus-4-6', 'claude-sonnet-4-6']
-  paperclipVersionMin: string;     // Minimum Paperclip version
+  zeroincVersionMin: string;     // Minimum ZeroInc version
 
   // Social proof
   installCount: number;
@@ -216,7 +216,7 @@ interface Purchase {
   id: string;
   listingId: string;
   buyerUserId: string;
-  buyerCompanyId: string | null;    // Target Paperclip company
+  buyerCompanyId: string | null;    // Target ZeroInc company
   pricePaidCents: number;
   paymentIntentId: string | null;   // Stripe
   installedAt: string | null;       // When deployed to company
@@ -284,7 +284,7 @@ interface Review {
 | `PATCH` | `/api/listings/:id` | Update listing |
 | `DELETE` | `/api/listings/:id` | Archive listing |
 | `POST` | `/api/listings/:id/purchase` | Purchase listing (Stripe checkout) |
-| `POST` | `/api/listings/:id/install` | Install to Paperclip company |
+| `POST` | `/api/listings/:id/install` | Install to ZeroInc company |
 | `GET` | `/api/listings/:id/reviews` | Get reviews |
 | `POST` | `/api/listings/:id/reviews` | Submit review |
 | `GET` | `/api/creators/:slug` | Creator profile |
@@ -304,14 +304,14 @@ Homepage → Browse marketplace → Filter by type/category
   → Click listing → Read details, reviews, preview org chart
   → Click "Buy" → Stripe checkout (or free install)
   → Post-purchase: "Install to Company" button
-  → Select target Paperclip company (or create new)
-  → ClipHub API calls Paperclip API to:
+  → Select target ZeroInc company (or create new)
+  → ClipHub API calls ZeroInc API to:
       1. Create agents with configs from blueprint
       2. Set up reporting chains
       3. Create projects with workspace configs
       4. Apply governance rules
       5. Deploy skill files to agent instruction paths
-  → Redirect to Paperclip dashboard with new team running
+  → Redirect to ZeroInc dashboard with new team running
 ```
 
 ### 5.2 Creator: Build → Publish → Earn
@@ -329,11 +329,11 @@ Sign up as creator → Connect Stripe
   → Track installs, revenue, reviews on creator dashboard
 ```
 
-### 5.3 Creator: Export from Paperclip → Publish
+### 5.3 Creator: Export from ZeroInc → Publish
 
 ```
-Running Paperclip company → "Export as Blueprint" (CLI or UI)
-  → Paperclip exports:
+Running ZeroInc company → "Export as Blueprint" (CLI or UI)
+  → ZeroInc exports:
       - Agent configs (sanitized — no secrets)
       - Org chart / reporting chains
       - Governance rules
@@ -349,7 +349,7 @@ Running Paperclip company → "Export as Blueprint" (CLI or UI)
 
 ### 6.1 Visual Language
 
-- **Color palette**: Dark ink primary, warm sand backgrounds, accent color for CTAs (Paperclip brand blue/purple)
+- **Color palette**: Dark ink primary, warm sand backgrounds, accent color for CTAs (ZeroInc brand blue/purple)
 - **Typography**: Clean sans-serif, strong hierarchy, monospace for technical details
 - **Cards**: Rounded corners, subtle shadows, clear pricing badges
 - **Org chart visuals**: Interactive tree/graph showing agent relationships in team blueprints
@@ -360,7 +360,7 @@ Running Paperclip company → "Export as Blueprint" (CLI or UI)
 |---|---|
 | Product card | Org chart mini-preview + agent count badge |
 | Detail page | Interactive org chart + per-agent breakdown |
-| Install flow | One-click deploy to Paperclip company |
+| Install flow | One-click deploy to ZeroInc company |
 | Social proof | "X companies running this blueprint" |
 | Preview | Live demo sandbox (stretch goal) |
 
@@ -407,7 +407,7 @@ When a buyer clicks "Install to Company":
 ```
 POST /api/listings/:id/install
 {
-  "targetCompanyId": "uuid",         // Existing Paperclip company
+  "targetCompanyId": "uuid",         // Existing ZeroInc company
   "overrides": {                      // Optional customization
     "agentModel": "claude-sonnet-4-6", // Override default model
     "budgetScale": 0.5,               // Scale budgets
@@ -421,7 +421,7 @@ The install handler:
 1. Validates buyer owns the purchase
 2. Validates target company access
 3. For each agent in blueprint:
-   - `POST /api/companies/:id/agents` (if `paperclip-create-agent` supports it, or via approval flow)
+   - `POST /api/companies/:id/agents` (if `zeroinc-create-agent` supports it, or via approval flow)
    - Sets adapter config, prompt template, instructions path
 4. Sets reporting chains
 5. Creates projects and workspaces
@@ -453,20 +453,20 @@ The install handler:
 
 ### 9.1 Stack
 
-- **Frontend**: Next.js (React), Tailwind CSS, same UI framework as Paperclip
-- **Backend**: Node.js API (or extend Paperclip server)
-- **Database**: Postgres (can share Paperclip's DB or separate)
+- **Frontend**: Next.js (React), Tailwind CSS, same UI framework as ZeroInc
+- **Backend**: Node.js API (or extend ZeroInc server)
+- **Database**: Postgres (can share ZeroInc's DB or separate)
 - **Payments**: Stripe Connect (marketplace mode)
 - **Storage**: S3/R2 for listing bundles and images
-- **Auth**: Shared with Paperclip auth (or OAuth2)
+- **Auth**: Shared with ZeroInc auth (or OAuth2)
 
-### 9.2 Integration with Paperclip
+### 9.2 Integration with ZeroInc
 
 ClipHub can be:
-- **Option A**: A separate app that calls Paperclip's API to install blueprints
-- **Option B**: A built-in section of the Paperclip UI (`/marketplace` route)
+- **Option A**: A separate app that calls ZeroInc's API to install blueprints
+- **Option B**: A built-in section of the ZeroInc UI (`/marketplace` route)
 
-Option B is simpler for MVP — adds routes to the existing Paperclip UI and API.
+Option B is simpler for MVP — adds routes to the existing ZeroInc UI and API.
 
 ### 9.3 Bundle Format
 
@@ -506,14 +506,14 @@ blueprint/
 - [ ] Listing detail page with org chart visualization
 - [ ] Creator registration and listing creation wizard
 - [ ] Free installs only (no payments yet)
-- [ ] Install flow: blueprint → Paperclip company
+- [ ] Install flow: blueprint → ZeroInc company
 
 ### Phase 2: Payments & Social
 - [ ] Stripe Connect integration
 - [ ] Purchase flow
 - [ ] Review system
 - [ ] Creator analytics dashboard
-- [ ] "Export from Paperclip" CLI command
+- [ ] "Export from ZeroInc" CLI command
 
 ### Phase 3: Growth
 - [ ] Search with relevance ranking

@@ -2,11 +2,11 @@
 
 Status: User-facing guide  
 Last updated: 2026-03-20  
-Audience: Operators setting up and running agents in Paperclip
+Audience: Operators setting up and running agents in ZeroInc
 
 ## 1. What this system does
 
-Agents in Paperclip do not run continuously.  
+Agents in ZeroInc do not run continuously.  
 They run in **heartbeats**: short execution windows triggered by a wakeup.
 
 Each heartbeat:
@@ -39,7 +39,7 @@ Common choices:
 - `process`: generic shell command adapter
 - `http`: calls an external HTTP endpoint
 
-For `claude_local` and `codex_local`, Paperclip assumes the CLI is already installed and authenticated on the host machine.
+For `claude_local` and `codex_local`, ZeroInc assumes the CLI is already installed and authenticated on the host machine.
 
 ## 3.2 Runtime behavior
 
@@ -86,7 +86,7 @@ Supported hook events in v1:
 
 Supported hook actions in v1:
 
-- `command`: run a local script/command on the Paperclip host
+- `command`: run a local script/command on the ZeroInc host
 - `webhook`: call an HTTP endpoint with JSON payload
 - `wake_agent`: wake one or more other agents in the same company
 - `assign_issue`: reassign the current issue to another agent, optionally waking them
@@ -156,7 +156,7 @@ Additional safety rules:
 
 ## 4. Session resume behavior
 
-Paperclip stores session IDs for resumable adapters.
+ZeroInc stores session IDs for resumable adapters.
 
 - Next heartbeat reuses the saved session automatically.
 - This gives continuity across heartbeats.
@@ -181,7 +181,7 @@ In local/dev setups, full logs are stored on disk under the configured run-log p
 
 ## 6. Live updates in the UI
 
-Paperclip pushes runtime/activity updates to the browser in real time.
+ZeroInc pushes runtime/activity updates to the browser in real time.
 
 You should see live changes for:
 
@@ -236,7 +236,7 @@ Typical failure causes:
 
 Claude-specific note:
 
-- If `ANTHROPIC_API_KEY` is set in adapter env or host environment, Claude uses API-key auth instead of subscription login. Paperclip surfaces this as a warning in environment tests, not a hard error.
+- If `ANTHROPIC_API_KEY` is set in adapter env or host environment, Claude uses API-key auth instead of subscription login. ZeroInc surfaces this as a warning in environment tests, not a hard error.
 
 ## 9. Security and risk notes
 

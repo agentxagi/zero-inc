@@ -1,12 +1,12 @@
 ---
-name: paperclip-create-agent
+name: zeroinc-create-agent
 description: >
-  Create new agents in Paperclip with governance-aware hiring. Use when you need
+  Create new agents in ZeroInc with governance-aware hiring. Use when you need
   to inspect adapter configuration options, compare existing agent configs,
   draft a new agent prompt/config, and submit a hire request.
 ---
 
-# Paperclip Create Agent Skill
+# ZeroInc Create Agent Skill
 
 Use this skill when you are asked to hire/create an agent.
 
@@ -28,7 +28,7 @@ curl -sS "$PAPERCLIP_API_URL/api/agents/me" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY"
 ```
 
-2. Discover available adapter configuration docs for this Paperclip instance.
+2. Discover available adapter configuration docs for this ZeroInc instance.
 
 ```sh
 curl -sS "$PAPERCLIP_API_URL/llms/agent-configuration.txt" \
@@ -136,4 +136,4 @@ Before sending a hire request:
 - If board requests revision, update payload and resubmit through approval flow.
 
 For endpoint payload shapes and full examples, read:
-`skills/paperclip-create-agent/references/api-reference.md`
+`skills/zeroinc-create-agent/references/api-reference.md`

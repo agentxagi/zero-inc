@@ -3,8 +3,8 @@ import express, { type Request, type Response, type NextFunction } from "express
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { createApp } from "../../app.js";
-import { createDb } from "@paperclipai/db";
-import type { Db } from "@paperclipai/db";
+import { createDb } from "@zeroinc/db";
+import type { Db } from "@zeroinc/db";
 
 /**
  * Integration tests for Issue Checkout API
@@ -100,18 +100,18 @@ describe("Issue Checkout Integration Tests", () => {
     });
 
     it("requires run ID header for agent checkouts", () => {
-      // Agent requests must include X-Paperclip-Run-Id
+      // Agent requests must include X-ZeroInc-Run-Id
       const headers: Record<string, string> = {
         Authorization: "Bearer test-key",
       };
 
       // Missing run ID should fail for agent actors
-      const hasRunId = "X-Paperclip-Run-Id" in headers;
+      const hasRunId = "X-ZeroInc-Run-Id" in headers;
       expect(hasRunId).toBe(false);
 
       // With run ID
-      headers["X-Paperclip-Run-Id"] = "run-123";
-      expect("X-Paperclip-Run-Id" in headers).toBe(true);
+      headers["X-ZeroInc-Run-Id"] = "run-123";
+      expect("X-ZeroInc-Run-Id" in headers).toBe(true);
     });
   });
 

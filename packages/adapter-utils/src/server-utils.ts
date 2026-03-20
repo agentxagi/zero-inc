@@ -39,7 +39,7 @@ const PAPERCLIP_SKILL_ROOT_RELATIVE_CANDIDATES = [
   "../../../../../skills",
 ];
 
-export interface PaperclipSkillEntry {
+export interface ZeroIncSkillEntry {
   name: string;
   source: string;
 }
@@ -132,7 +132,7 @@ export function redactEnvForLogs(env: Record<string, string>): Record<string, st
   return redacted;
 }
 
-export function buildPaperclipEnv(agent: { id: string; companyId: string }): Record<string, string> {
+export function buildZeroIncEnv(agent: { id: string; companyId: string }): Record<string, string> {
   const resolveHostForUrl = (rawHost: string): string => {
     const host = rawHost.trim();
     if (!host || host === "0.0.0.0" || host === "::") return "localhost";
@@ -274,7 +274,7 @@ export async function ensureAbsoluteDirectory(
   }
 }
 
-export async function resolvePaperclipSkillsDir(
+export async function resolveZeroIncSkillsDir(
   moduleDir: string,
   additionalCandidates: string[] = [],
 ): Promise<string | null> {
@@ -294,11 +294,11 @@ export async function resolvePaperclipSkillsDir(
   return null;
 }
 
-export async function listPaperclipSkillEntries(
+export async function listZeroIncSkillEntries(
   moduleDir: string,
   additionalCandidates: string[] = [],
-): Promise<PaperclipSkillEntry[]> {
-  const root = await resolvePaperclipSkillsDir(moduleDir, additionalCandidates);
+): Promise<ZeroIncSkillEntry[]> {
+  const root = await resolveZeroIncSkillsDir(moduleDir, additionalCandidates);
   if (!root) return [];
 
   try {
@@ -314,14 +314,14 @@ export async function listPaperclipSkillEntries(
   }
 }
 
-export async function readPaperclipSkillMarkdown(
+export async function readZeroIncSkillMarkdown(
   moduleDir: string,
   skillName: string,
 ): Promise<string | null> {
   const normalized = skillName.trim().toLowerCase();
   if (!normalized) return null;
 
-  const entries = await listPaperclipSkillEntries(moduleDir);
+  const entries = await listZeroIncSkillEntries(moduleDir);
   const match = entries.find((entry) => entry.name === normalized);
   if (!match) return null;
 
@@ -332,7 +332,7 @@ export async function readPaperclipSkillMarkdown(
   }
 }
 
-export async function ensurePaperclipSkillSymlink(
+export async function ensureZeroIncSkillSymlink(
   source: string,
   target: string,
   linkSkill: (source: string, target: string) => Promise<void> = (linkSource, linkTarget) =>
@@ -436,8 +436,8 @@ export async function runChildProcess(
 
     // Strip Claude Code nesting-guard env vars so spawned `claude` processes
     // don't refuse to start with "cannot be launched inside another session".
-    // These vars leak in when the Paperclip server itself is started from
-    // within a Claude Code session (e.g. `npx paperclipai run` in a terminal
+    // These vars leak in when the ZeroInc server itself is started from
+    // within a Claude Code session (e.g. `npx zeroinc run` in a terminal
     // owned by Claude Code) or when cron inherits a contaminated shell env.
     const CLAUDE_CODE_NESTING_VARS = [
       "CLAUDECODE",

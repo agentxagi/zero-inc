@@ -189,17 +189,17 @@ describe("Agents API Integration Tests", () => {
 
   describe("POST /api/agents/:id/heartbeat/invoke", () => {
     it("requires run ID header for tracing", () => {
-      // Heartbeat invoke must include X-Paperclip-Run-Id
+      // Heartbeat invoke must include X-ZeroInc-Run-Id
       const headers: Record<string, string> = {
         Authorization: "Bearer test-jwt",
       };
 
-      const hasRunId = "X-Paperclip-Run-Id" in headers;
+      const hasRunId = "X-ZeroInc-Run-Id" in headers;
       expect(hasRunId).toBe(false);
 
       // With run ID
-      headers["X-Paperclip-Run-Id"] = randomUUID();
-      expect("X-Paperclip-Run-Id" in headers).toBe(true);
+      headers["X-ZeroInc-Run-Id"] = randomUUID();
+      expect("X-ZeroInc-Run-Id" in headers).toBe(true);
     });
 
     it("supports wake context parameters", () => {

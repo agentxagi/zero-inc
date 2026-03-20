@@ -1,4 +1,4 @@
-import type { PaperclipPluginManifestV1 } from "@paperclipai/plugin-sdk";
+import type { ZeroIncPluginManifestV1 } from "@zeroinc/plugin-sdk";
 import {
   DEFAULT_CONFIG,
   EXPORT_NAMES,
@@ -11,13 +11,13 @@ import {
   WEBHOOK_KEYS,
 } from "./constants.js";
 
-const manifest: PaperclipPluginManifestV1 = {
+const manifest: ZeroIncPluginManifestV1 = {
   id: PLUGIN_ID,
   apiVersion: 1,
   version: PLUGIN_VERSION,
   displayName: "Kitchen Sink (Example)",
-  description: "Reference plugin that demonstrates the current Paperclip plugin API surface, UI surfaces, bridge actions, events, jobs, webhooks, tools, local workspace access, and runtime diagnostics in one place.",
-  author: "Paperclip",
+  description: "Reference plugin that demonstrates the current ZeroInc plugin API surface, UI surfaces, bridge actions, events, jobs, webhooks, tools, local workspace access, and runtime diagnostics in one place.",
+  author: "ZeroInc",
   categories: ["ui", "automation", "workspace", "connector"],
   capabilities: [
     "companies.read",
@@ -158,7 +158,7 @@ const manifest: PaperclipPluginManifestV1 = {
     {
       name: TOOL_NAMES.companySummary,
       displayName: "Kitchen Sink Company Summary",
-      description: "Summarizes the current company using the Paperclip domain APIs.",
+      description: "Summarizes the current company using the ZeroInc domain APIs.",
       parametersSchema: {
         type: "object",
         properties: {},

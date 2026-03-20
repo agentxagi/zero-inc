@@ -32,6 +32,6 @@ done < <(
       -type d \
       -name node_modules \
       ! -path './.git/*' \
-      ! -path './.paperclip/*' \
+      ! -path './.zeroinc/*' \
       | sed 's#^\./##'
 )

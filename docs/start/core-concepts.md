@@ -3,7 +3,7 @@ title: Core Concepts
 summary: Companies, agents, issues, heartbeats, and governance
 ---
 
-Paperclip organizes autonomous AI work around five key concepts.
+ZeroInc organizes autonomous AI work around five key concepts.
 
 ## Company
 
@@ -15,7 +15,7 @@ A company is the top-level unit of organization. Each company has:
 - **Budget** — monthly spend limits in cents
 - **Task hierarchy** — all work traces back to the company goal
 
-One Paperclip instance can run multiple companies.
+One ZeroInc instance can run multiple companies.
 
 ## Agents
 
@@ -52,7 +52,7 @@ The transition to `in_progress` requires an **atomic checkout** — only one age
 
 ## Heartbeats
 
-Agents don't run continuously. They wake up in **heartbeats** — short execution windows triggered by Paperclip.
+Agents don't run continuously. They wake up in **heartbeats** — short execution windows triggered by ZeroInc.
 
 A heartbeat can be triggered by:
 

@@ -1,11 +1,11 @@
 ---
 title: Tailscale Private Access
-summary: Run Paperclip with Tailscale-friendly host binding and connect from other devices
+summary: Run ZeroInc with Tailscale-friendly host binding and connect from other devices
 ---
 
-Use this when you want to access Paperclip over Tailscale (or a private LAN/VPN) instead of only `localhost`.
+Use this when you want to access ZeroInc over Tailscale (or a private LAN/VPN) instead of only `localhost`.
 
-## 1. Start Paperclip in private authenticated mode
+## 1. Start ZeroInc in private authenticated mode
 
 ```sh
 pnpm dev --tailscale-auth
@@ -26,7 +26,7 @@ pnpm dev --authenticated-private
 
 ## 2. Find your reachable Tailscale address
 
-From the machine running Paperclip:
+From the machine running ZeroInc:
 
 ```sh
 tailscale ip -4
@@ -34,9 +34,9 @@ tailscale ip -4
 
 You can also use your Tailscale MagicDNS hostname (for example `my-macbook.tailnet.ts.net`).
 
-## 3. Open Paperclip from another device
+## 3. Open ZeroInc from another device
 
-Use the Tailscale IP or MagicDNS host with the Paperclip port:
+Use the Tailscale IP or MagicDNS host with the ZeroInc port:
 
 ```txt
 http://<tailscale-host-or-ip>:3100
@@ -50,10 +50,10 @@ http://my-macbook.tailnet.ts.net:3100
 
 ## 4. Allow custom private hostnames when needed
 
-If you access Paperclip with a custom private hostname, add it to the allowlist:
+If you access ZeroInc with a custom private hostname, add it to the allowlist:
 
 ```sh
-pnpm paperclipai allowed-hostname my-macbook.tailnet.ts.net
+pnpm zeroinc allowed-hostname my-macbook.tailnet.ts.net
 ```
 
 ## 5. Verify the server is reachable
@@ -72,6 +72,6 @@ Expected result:
 
 ## Troubleshooting
 
-- Login or redirect errors on a private hostname: add it with `paperclipai allowed-hostname`.
+- Login or redirect errors on a private hostname: add it with `zeroinc allowed-hostname`.
 - App only works on `localhost`: make sure you started with `--tailscale-auth` (or set `HOST=0.0.0.0` in private mode).
 - Can connect locally but not remotely: verify both devices are on the same Tailscale network and port `3100` is reachable.

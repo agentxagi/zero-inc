@@ -3,7 +3,7 @@ title: Structured Logging
 summary: JSON logging format and correlation IDs
 ---
 
-Paperclip uses structured JSON logging with Pino for all server operations. Logs include correlation IDs for request tracing and context for agents, issues, and runs.
+ZeroInc uses structured JSON logging with Pino for all server operations. Logs include correlation IDs for request tracing and context for agents, issues, and runs.
 
 ## Log Format
 
@@ -14,7 +14,7 @@ All logs are JSON objects with the following base structure:
   "level": "info",
   "time": "2026-03-14T12:00:00.000Z",
   "msg": "Request completed",
-  "service": "paperclip-api",
+  "service": "zeroinc-api",
   "env": "production",
   "correlationId": "pc_m1abc123_def456"
 }
@@ -94,12 +94,12 @@ LOG_LEVEL=info
 Logs are written to two destinations:
 
 1. **Console** (stdout): Pretty-printed, colorized output for `info` and above
-2. **File**: JSON format to `~/.paperclip/instances/default/logs/server.log`
+2. **File**: JSON format to `~/.zeroinc/instances/default/logs/server.log`
 
 Configure log directory:
 
 ```sh
-PAPERCLIP_LOG_DIR=/var/log/paperclip
+PAPERCLIP_LOG_DIR=/var/log/zeroinc
 ```
 
 ## Integration with Log Aggregation
@@ -117,7 +117,7 @@ The JSON format is compatible with:
 filebeat.inputs:
   - type: log
     paths:
-      - /var/log/paperclip/*.log
+      - /var/log/zeroinc/*.log
     json.keys_under_root: true
     json.add_error_key: true
     json.message_key: msg

@@ -1,16 +1,16 @@
-# Paperclip Memory Service Plan
+# ZeroInc Memory Service Plan
 
 ## Goal
 
-Define a Paperclip memory service and surface API that can sit above multiple memory backends, while preserving Paperclip's control-plane requirements:
+Define a ZeroInc memory service and surface API that can sit above multiple memory backends, while preserving ZeroInc's control-plane requirements:
 
 - company scoping
 - auditability
-- provenance back to Paperclip work objects
+- provenance back to ZeroInc work objects
 - budget / cost visibility
 - plugin-first extensibility
 
-This plan is based on the external landscape summarized in `doc/memory-landscape.md` and on the current Paperclip architecture in:
+This plan is based on the external landscape summarized in `doc/memory-landscape.md` and on the current ZeroInc architecture in:
 
 - `doc/SPEC-implementation.md`
 - `doc/plugins/PLUGIN_SPEC.md`
@@ -19,7 +19,7 @@ This plan is based on the external landscape summarized in `doc/memory-landscape
 
 ## Recommendation In One Sentence
 
-Paperclip should not embed one opinionated memory engine into core. It should add a company-scoped memory control plane with a small normalized adapter contract, then let built-ins and plugins implement the provider-specific behavior.
+ZeroInc should not embed one opinionated memory engine into core. It should add a company-scoped memory control plane with a small normalized adapter contract, then let built-ins and plugins implement the provider-specific behavior.
 
 ## Product Decisions
 
@@ -48,15 +48,15 @@ Agents and services resolve the active provider by key, not by hard-coded vendor
 
 ### 3. Plugins are the primary provider path
 
-Built-ins are useful for a zero-config local path, but most providers should arrive through the existing Paperclip plugin runtime.
+Built-ins are useful for a zero-config local path, but most providers should arrive through the existing ZeroInc plugin runtime.
 
 That keeps the core small and matches the current direction that optional knowledge-like systems live at the edges.
 
-### 4. Paperclip owns routing, provenance, and accounting
+### 4. ZeroInc owns routing, provenance, and accounting
 
-Providers should not decide how Paperclip entities map to governance.
+Providers should not decide how ZeroInc entities map to governance.
 
-Paperclip core should own:
+ZeroInc core should own:
 
 - who is allowed to call a memory operation
 - which company / agent / project scope is active
@@ -96,7 +96,7 @@ This is the object selected by key.
 
 ### Memory scope
 
-The normalized Paperclip scope passed into a provider request.
+The normalized ZeroInc scope passed into a provider request.
 
 At minimum:
 
@@ -123,9 +123,9 @@ Supported source kinds should include:
 
 ### Memory operation
 
-A normalized write, query, browse, or delete action performed through Paperclip.
+A normalized write, query, browse, or delete action performed through ZeroInc.
 
-Paperclip should log every operation, whether the provider is local or external.
+ZeroInc should log every operation, whether the provider is local or external.
 
 ## Required Adapter Contract
 
@@ -242,11 +242,11 @@ These should be capability-gated, not required:
 - `sync(source)` for connectors or background ingestion
 - `explain(queryResult)` for providers that can expose retrieval traces
 
-## What Paperclip Should Persist
+## What ZeroInc Should Persist
 
-Paperclip should not mirror the full provider memory corpus into Postgres unless the provider is a Paperclip-managed local provider.
+ZeroInc should not mirror the full provider memory corpus into Postgres unless the provider is a ZeroInc-managed local provider.
 
-Paperclip core should persist:
+ZeroInc core should persist:
 
 - memory bindings and overrides
 - provider keys and capability metadata
@@ -264,13 +264,13 @@ For external providers, the memory payload itself can remain in the provider.
 These should be low-risk and easy to reason about:
 
 1. `pre-run hydrate`
-   Before an agent run starts, Paperclip may call `query(... intent = "agent_preamble")` using the active binding.
+   Before an agent run starts, ZeroInc may call `query(... intent = "agent_preamble")` using the active binding.
 
 2. `post-run capture`
-   After a run finishes, Paperclip may write a summary or transcript-derived note tied to the run.
+   After a run finishes, ZeroInc may write a summary or transcript-derived note tied to the run.
 
 3. `issue comment / document capture`
-   When enabled on the binding, Paperclip may capture selected issue comments or issue documents as memory sources.
+   When enabled on the binding, ZeroInc may capture selected issue comments or issue documents as memory sources.
 
 ### Explicit hooks
 
@@ -292,7 +292,7 @@ These should be tool- or UI-driven first:
 
 ## Agent UX Rules
 
-Paperclip should give agents both automatic recall and explicit tools, with simple guidance:
+ZeroInc should give agents both automatic recall and explicit tools, with simple guidance:
 
 - use `memory.search` when the task depends on prior decisions, people, projects, or long-running context that is not in the current issue thread
 - use `memory.note` when a durable fact, preference, or decision should survive this run
@@ -303,7 +303,7 @@ This keeps memory available without forcing every agent prompt to become a memor
 
 ## Browse And Inspect Surface
 
-Paperclip needs a first-class UI for memory, otherwise providers become black boxes.
+ZeroInc needs a first-class UI for memory, otherwise providers become black boxes.
 
 The initial browse surface should support:
 
@@ -320,7 +320,7 @@ When a provider supports richer browsing, the plugin can add deeper views throug
 
 Every adapter response should be able to return usage records.
 
-Paperclip should roll up:
+ZeroInc should roll up:
 
 - memory inference tokens
 - embedding tokens
@@ -336,7 +336,7 @@ It should also record evaluation-oriented metrics where possible:
 - manual correction count
 - per-binding success / failure counts
 
-This is important because a memory system that "works" but silently burns budget is not acceptable in Paperclip.
+This is important because a memory system that "works" but silently burns budget is not acceptable in ZeroInc.
 
 ## Suggested Data Model Additions
 
@@ -370,7 +370,7 @@ The best zero-config built-in is a local markdown-first provider with optional s
 
 Why:
 
-- it matches Paperclip's local-first posture
+- it matches ZeroInc's local-first posture
 - it is inspectable
 - it is easy to back up and debug
 - it gives the system a baseline even without external API keys
@@ -412,7 +412,7 @@ The design should still treat that built-in as just another provider behind the 
 ## Open Questions
 
 - Should project overrides exist in V1 of the memory service, or should we force company default + agent override first?
-- Do we want Paperclip-managed extraction pipelines at all, or should built-ins be the only place where Paperclip owns extraction?
+- Do we want ZeroInc-managed extraction pipelines at all, or should built-ins be the only place where ZeroInc owns extraction?
 - Should memory usage extend the current `cost_events` model directly, or should memory operations keep a parallel usage log and roll up into `cost_events` secondarily?
 - Do we want provider install / binding changes to require approvals for some companies?
 
@@ -420,7 +420,7 @@ The design should still treat that built-in as just another provider behind the 
 
 The right abstraction is:
 
-- Paperclip owns memory bindings, scopes, provenance, governance, and usage reporting.
+- ZeroInc owns memory bindings, scopes, provenance, governance, and usage reporting.
 - Providers own extraction, ranking, storage, and provider-native memory semantics.
 
-That gives Paperclip a stable "memory service" without locking the product to one memory philosophy or one vendor.
+That gives ZeroInc a stable "memory service" without locking the product to one memory philosophy or one vendor.

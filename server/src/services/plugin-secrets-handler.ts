@@ -1,6 +1,6 @@
 /**
  * Plugin secrets host-side handler — resolves secret references through the
- * Paperclip secret provider system.
+ * ZeroInc secret provider system.
  *
  * When a plugin worker calls `ctx.secrets.resolve(secretRef)`, the JSON-RPC
  * request arrives at the host with `{ secretRef }`. This module provides the
@@ -34,9 +34,9 @@
  */
 
 import { eq, and, desc } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { companySecrets, companySecretVersions, pluginConfig } from "@paperclipai/db";
-import type { SecretProvider } from "@paperclipai/shared";
+import type { Db } from "@zeroinc/db";
+import { companySecrets, companySecretVersions, pluginConfig } from "@zeroinc/db";
+import type { SecretProvider } from "@zeroinc/shared";
 import { getSecretProvider } from "../secrets/provider-registry.js";
 import { pluginRegistryService } from "./plugin-registry.js";
 

@@ -53,7 +53,7 @@ import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "./Ma
 import { AgentIcon } from "./AgentIconPicker";
 import { InlineEntitySelector, type InlineEntityOption } from "./InlineEntitySelector";
 
-const DRAFT_KEY = "paperclip:issue-draft";
+const DRAFT_KEY = "zeroinc:issue-draft";
 const DEBOUNCE_MS = 800;
 
 /** Return black or white hex based on background luminance (WCAG perceptual weights). */

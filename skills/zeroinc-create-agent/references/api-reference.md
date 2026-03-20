@@ -1,4 +1,4 @@
-# Paperclip Create Agent API Reference
+# ZeroInc Create Agent API Reference
 
 ## Core Endpoints
 

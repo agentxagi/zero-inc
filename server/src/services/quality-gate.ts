@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { agents, heartbeatRuns, issueComments, issues } from "@paperclipai/db";
-import { DEFAULT_QUALITY_GATE_CONFIG, type QualityGateConfig } from "@paperclipai/shared";
+import type { Db } from "@zeroinc/db";
+import { agents, heartbeatRuns, issueComments, issues } from "@zeroinc/db";
+import { DEFAULT_QUALITY_GATE_CONFIG, type QualityGateConfig } from "@zeroinc/shared";
 
 // ---------------------------------------------------------------------------
 // Types

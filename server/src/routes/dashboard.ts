@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { and, eq, or, sql } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { agents, issues } from "@paperclipai/db";
+import type { Db } from "@zeroinc/db";
+import { agents, issues } from "@zeroinc/db";
 import { dashboardService } from "../services/dashboard.js";
 import { assertCompanyAccess } from "./authz.js";
 import { existsSync, readdirSync, statSync } from "node:fs";

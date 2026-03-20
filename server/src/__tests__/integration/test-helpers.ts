@@ -5,7 +5,7 @@ import path from "node:path";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import request from "supertest";
-import { createDb, type Db } from "@paperclipai/db";
+import { createDb, type Db } from "@zeroinc/db";
 import { createApp } from "../app.js";
 import type { StorageService } from "../storage/types.js";
 
@@ -170,7 +170,7 @@ export function agentRequest(ctx: TestContext, runId?: string) {
     setAuth: (req: request.Test) => {
       return req
         .set("Authorization", `Bearer ${ctx.agentApiKey}`)
-        .set("X-Paperclip-Run-Id", run);
+        .set("X-ZeroInc-Run-Id", run);
     },
     runId: run,
   };

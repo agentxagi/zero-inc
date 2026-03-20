@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Db } from "@paperclipai/db";
-import { agents, issues } from "@paperclipai/db";
+import type { Db } from "@zeroinc/db";
+import { agents, issues } from "@zeroinc/db";
 
 const mockLogActivity = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockIssueService = vi.hoisted(() => ({

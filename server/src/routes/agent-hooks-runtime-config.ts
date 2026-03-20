@@ -1,4 +1,4 @@
-import { agentHooksConfigSchema } from "@paperclipai/shared";
+import { agentHooksConfigSchema } from "@zeroinc/shared";
 import { forbidden, unprocessable } from "../errors.js";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
