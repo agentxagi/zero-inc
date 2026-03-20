@@ -210,18 +210,12 @@ See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full guide.
 
 <br/>
 
+
 ## Roadmap
 
-- ⚪ Custom agent personas (Security Engineer, Code Reviewer, SRE) as templates
-- ⚪ ZeroMart — downloadable company templates
-- ⚪ Webhook system for external integrations
-- ⚪ Metrics dashboard with per-agent quality and cost analytics
-- ⚪ Mobile app for on-the-go monitoring
-- 🟢 Quality Gates + Review Pipeline (built-in code review)
-- 🟢 Heartbeat Hooks (declarative automation)
-- 🟢 Human Approval via Telegram buttons
+Roadmap is being defined. If you have ideas or want to collaborate, [open an issue](https://github.com/agentxagi/zero-inc/issues).
 
-<br/>
+Current focus: hardening Quality Gates + Review Pipeline for production use.
 
 ## Contributing
 
