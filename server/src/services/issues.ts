@@ -30,6 +30,8 @@ import { instanceSettingsService } from "./instance-settings.js";
 import { redactCurrentUserText } from "../log-redaction.js";
 import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallback.js";
 import { getDefaultCompanyGoal } from "./goals.js";
+import { qualityGateService } from "./quality-gate.js";
+import { reviewPipelineService } from "./review-pipeline.js";
 
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
@@ -319,6 +321,8 @@ function withActiveRuns(
 
 export function issueService(db: Db) {
   const instanceSettings = instanceSettingsService(db);
+  const qualityGate = qualityGateService(db);
+  const reviewPipeline = reviewPipelineService(db);
 
   async function assertAssignableAgent(companyId: string, agentId: string) {
     const assignee = await db
@@ -857,7 +861,7 @@ export function issueService(db: Db) {
         patch.checkoutRunId = null;
       }
 
-      return db.transaction(async (tx) => {
+      const result = await db.transaction(async (tx) => {
         const defaultCompanyGoal = await getDefaultCompanyGoal(tx, existing.companyId);
         patch.goalId = resolveNextIssueGoalId({
           currentProjectId: existing.projectId,
@@ -879,6 +883,75 @@ export function issueService(db: Db) {
         const [enriched] = await withIssueLabels(tx, [updated]);
         return enriched;
       });
+
+      // Quality gate: validate done transitions (also enforced in routes/issues.ts)
+      if (result && result.status === "done" && existing.assigneeAgentId) {
+        const config = qualityGate.resolveConfig();
+        const qualityResult = await qualityGate.runChecks(
+          {
+            id: result.id,
+            companyId: result.companyId,
+            status: existing.status,
+            assigneeAgentId: existing.assigneeAgentId,
+            executionRunId: existing.executionRunId,
+            executionLockedAt: existing.executionLockedAt,
+            startedAt: existing.startedAt,
+            completedAt: result.completedAt,
+          },
+          config,
+        );
+        if (!qualityResult.passed && config.autoReopen) {
+          const blockers = qualityResult.checks.filter((c) => !c.pass && c.severity === "blocker");
+          const revertPatch: Partial<typeof issues.$inferInsert> = {
+            status: "in_progress",
+            completedAt: null,
+            checkoutRunId: null,
+            executionRunId: null,
+            executionAgentNameKey: null,
+            executionLockedAt: null,
+            updatedAt: new Date(),
+          };
+          await db.update(issues).set(revertPatch).where(eq(issues.id, result.id));
+          const commentBody = redactCurrentUserText(
+            `## Quality Gate Failed\n\nThe following checks blocked completion:\n\n${blockers.map((b) => `- **${b.message}**`).join("\n")}\n\nStatus reverted to \`in_progress\`. Please address these issues and try again.`,
+          );
+          await db.insert(issueComments).values({
+            companyId: result.companyId,
+            issueId: result.id,
+            body: commentBody,
+          });
+          await qualityGate.recordCompletion(existing.assigneeAgentId, qualityResult);
+          const refreshed = await db.select().from(issues).where(eq(issues.id, result.id)).then((rows) => rows[0] ?? null);
+          if (refreshed) {
+            const [enriched] = await withIssueLabels(db, [refreshed]);
+            return enriched;
+          }
+          return result;
+        } else if (qualityResult.passed) {
+          await qualityGate.recordCompletion(existing.assigneeAgentId, qualityResult);
+          const reviewConfig = reviewPipeline.resolveConfig();
+          const sentToReview = await reviewPipeline.transitionToReview(
+            result.id,
+            existing.assigneeAgentId,
+            qualityResult,
+            reviewConfig,
+          );
+          if (sentToReview) {
+            const refreshed = await db.select().from(issues).where(eq(issues.id, result.id)).then((rows) => rows[0] ?? null);
+            if (refreshed) {
+              const [enriched] = await withIssueLabels(db, [refreshed]);
+              return enriched;
+            }
+          }
+        }
+      }
+
+      // Track blocked transitions for agent quality score
+      if (result && result.status === "blocked" && existing.status !== "blocked" && existing.assigneeAgentId) {
+        await qualityGate.incrementBlockedCount(existing.assigneeAgentId);
+      }
+
+      return result;
     },
 
     remove: (id: string) =>
