@@ -1,74 +1,55 @@
-# Contributing Guide
+# Contributing to ZeroInc
 
-Thanks for wanting to contribute!
+Thanks for wanting to contribute to ZeroInc — the AI agent orchestration platform with built-in quality gates and review pipelines.
 
-We really appreciate both small fixes and thoughtful larger changes.
+## Quick Start
 
-## Two Paths to Get Your Pull Request Accepted
+1. Fork the repo
+2. Create a feature branch: `git checkout -b feat/my-feature`
+3. Make your changes
+4. Run tests: `pnpm test`
+5. Build: `pnpm build`
+6. Open a Pull Request
 
-### Path 1: Small, Focused Changes (Fastest way to get merged)
+## Two Paths to Get Your PR Accepted
 
+### Path 1: Small, Focused Changes (Fastest)
 - Pick **one** clear thing to fix/improve
 - Touch the **smallest possible number of files**
-- Make sure the change is very targeted and easy to review
-- All automated checks pass (including Greptile comments)
+- Make sure all automated checks pass
 - No new lint/test failures
 
-These almost always get merged quickly when they're clean.
-
 ### Path 2: Bigger or Impactful Changes
-
-- **First** talk about it in Discord → #dev channel  
-  → Describe what you're trying to solve  
-  → Share rough ideas / approach
+- **First**, open an issue describing what you want to do and why
 - Once there's rough agreement, build it
 - In your PR include:
-  - Before / After screenshots (or short video if UI/behavior change)
   - Clear description of what & why
-  - Proof it works (manual testing notes)
-  - All tests passing
-  - All Greptile + other PR comments addressed
+  - Proof it works (tests passing, manual testing notes)
+  - All review comments addressed
 
-PRs that follow this path are **much** more likely to be accepted, even when they're large.
-
-## General Rules (both paths)
-
+## General Rules
 - Write clear commit messages
-- Keep PR title + description meaningful
-- One PR = one logical change (unless it's a small related group)
-- Run tests locally first
-- Be kind in discussions 😄
+- One PR = one logical change
+- Run tests locally before pushing
+- Be kind in discussions
 
-## Writing a Good PR message
+## ZeroInc-Specific: Quality Gates
 
-Please include a "thinking path" at the top of your PR message that explains from the top of the project down to what you fixed. E.g.:
+ZeroInc has automatic quality gates that verify task completion. When contributing:
+- All tests must pass
+- New features should include tests
+- Code that touches the quality gate or review pipeline needs extra review
 
-### Thinking Path Example 1:
+## PR Thinking Path
 
-> - Paperclip orchestrates ai-agents for zero-human companies
-> - There are many types of adapters for each LLM model provider
-> - But LLM's have a context limit and not all agents can automatically compact their context
-> - So we need to have an adapter-specific configuration for which adapters can and cannot automatically compact their context
-> - This pull request adds per-adapter configuration of compaction, either auto or paperclip managed
-> - That way we can get optimal performance from any adapter/provider in Paperclip
+Include a thinking path at the top of your PR that explains your reasoning:
 
-### Thinking Path Example 2:
+> - ZeroInc orchestrates AI agents for zero-human companies
+> - [Context about the problem]
+> - [Why it matters]
+> - This PR [what you did]
+> - The benefit is [expected outcome]
 
-> - Paperclip orchestrates ai-agents for zero-human companies
-> - But humans want to watch the agents and oversee their work
-> - Human users also operate in teams and so they need their own logins, profiles, views etc.
-> - So we have a multi-user system for humans
-> - But humans want to be able to update their own profile picture and avatar
-> - But the avatar upload form wasn't saving the avatar to the file storage system
-> - So this PR fixes the avatar upload form to use the file storage service
-> - The benefit is we don't have a one-off file storage for just one aspect of the system, which would cause confusion and extra configuration
+Questions? Open an issue — we're happy to help.
 
-Then have the rest of your normal PR message after the Thinking Path.
-
-This should include details about what you did, why you did it, why it matters & the benefits, how we can verify it works, and any risks.
-
-Please include screenshots if possible if you have a visible change. (use something like the [agent-browser skill](https://github.com/vercel-labs/agent-browser/blob/main/skills/agent-browser/SKILL.md) or similar to take screenshots). Ideally, you include before and after screenshots.
-
-Questions? Just ask in #dev — we're happy to help.
-
-Happy hacking!
+Happy hacking! 🧪
