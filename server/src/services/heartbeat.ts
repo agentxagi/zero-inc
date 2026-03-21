@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
 import type { BillingType } from "@zeroinc/shared";
 import {
@@ -1841,6 +1841,64 @@ export function heartbeatService(db: Db) {
     }
   }
 
+  async function cleanupStaleExecutionLocks() {
+    // Defense-in-depth: find issues with execution locks pointing to
+    // non-active runs and clear them. This catches edge cases where
+    // releaseIssueExecutionAndPromote or the status side-effects
+    // didn't fire (e.g. process crash between lock set and run finalization).
+    const STALE_LOCK_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+
+    const lockedIssues = await db
+      .select({
+        id: issues.id,
+        companyId: issues.companyId,
+        executionRunId: issues.executionRunId,
+        executionLockedAt: issues.executionLockedAt,
+        status: issues.status,
+      })
+      .from(issues)
+      .where(isNotNull(issues.executionRunId));
+
+    let cleaned = 0;
+    const now = new Date();
+
+    for (const issue of lockedIssues) {
+      const lockedAt = issue.executionLockedAt ? new Date(issue.executionLockedAt).getTime() : 0;
+      if (now.getTime() - lockedAt < STALE_LOCK_THRESHOLD_MS) continue;
+
+      const [run] = await db
+        .select({ status: heartbeatRuns.status })
+        .from(heartbeatRuns)
+        .where(eq(heartbeatRuns.id, issue.executionRunId!))
+        .limit(1);
+
+      const runActive = run && (run.status === "queued" || run.status === "running");
+      if (runActive) continue;
+
+      logger.info(
+        { issueId: issue.id, executionRunId: issue.executionRunId, runStatus: run?.status ?? "missing", lockedAt: issue.executionLockedAt },
+        "cleaning stale execution lock",
+      );
+
+      await db
+        .update(issues)
+        .set({
+          executionRunId: null,
+          executionAgentNameKey: null,
+          executionLockedAt: null,
+          updatedAt: now,
+        })
+        .where(eq(issues.id, issue.id));
+
+      cleaned++;
+    }
+
+    if (cleaned > 0) {
+      logger.info({ cleaned }, "stale execution lock cleanup complete");
+    }
+    return { cleaned };
+  }
+
   async function updateRuntimeState(
     agent: typeof agents.$inferSelect,
     run: typeof heartbeatRuns.$inferSelect,
@@ -2804,6 +2862,11 @@ export function heartbeatService(db: Db) {
         .where(and(eq(issues.companyId, run.companyId), eq(issues.executionRunId, run.id)));
 
       if (lockedIssues.length === 0) return;
+
+      logger.info(
+        { runId: run.id, agentId: run.agentId, issueCount: lockedIssues.length, issueIds: lockedIssues.map((i) => i.id) },
+        "releasing execution locks",
+      );
 
       // Clear execution lock for ALL issues locked by this run
       await tx
@@ -3772,6 +3835,8 @@ export function heartbeatService(db: Db) {
     reportRunActivity: clearDetachedRunWarning,
 
     reapOrphanedRuns,
+
+    cleanupStaleExecutionLocks,
 
     resumeQueuedRuns,
 
