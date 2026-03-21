@@ -1538,7 +1538,12 @@ export function heartbeatService(db: Db) {
             executionLockedAt: now,
             updatedAt: now,
           })
-          .where(and(eq(issues.id, issueId), eq(issues.companyId, run.companyId), eq(issues.executionRunId, run.id)));
+          .where(and(
+            eq(issues.id, issueId),
+            eq(issues.companyId, run.companyId),
+            eq(issues.executionRunId, run.id),
+            sql`${issues.status} not in ('done', 'cancelled')`,
+          ));
       }
 
       return retryRun;
@@ -2920,7 +2925,10 @@ export function heartbeatService(db: Db) {
             executionLockedAt: now,
             updatedAt: now,
           })
-          .where(eq(issues.id, issue.id));
+          .where(and(
+            eq(issues.id, issue.id),
+            sql`${issues.status} not in ('done', 'cancelled')`,
+          ));
 
           return newRun;
         }
@@ -3122,7 +3130,10 @@ export function heartbeatService(db: Db) {
                 executionLockedAt: new Date(),
                 updatedAt: new Date(),
               })
-              .where(eq(issues.id, issue.id));
+              .where(and(
+                eq(issues.id, issue.id),
+                sql`${issues.status} not in ('done', 'cancelled')`,
+              ));
           }
         }
 
@@ -3287,7 +3298,10 @@ export function heartbeatService(db: Db) {
             executionLockedAt: new Date(),
             updatedAt: new Date(),
           })
-          .where(eq(issues.id, issue.id));
+          .where(and(
+            eq(issues.id, issue.id),
+            sql`${issues.status} not in ('done', 'cancelled')`,
+          ));
 
         return { kind: "queued" as const, run: newRun };
       });

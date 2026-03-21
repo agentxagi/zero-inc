@@ -173,14 +173,30 @@ export function qualityGateService(db: Db) {
   }
 
   async function checkNoStaleLock(issue: IssueContext): Promise<QualityCheckResult> {
-    if (issue.executionLockedAt) {
-      return {
-        pass: false,
-        message: "Execution lock is still held. The checkout was not properly released before completion.",
-        severity: "blocker",
-      };
+    // No lock fields set — lock is properly released
+    if (!issue.executionLockedAt && !issue.executionRunId) {
+      return { pass: true, message: "Execution lock properly released.", severity: "info" };
     }
-    return { pass: true, message: "Execution lock properly released.", severity: "info" };
+    // Lock fields are present — verify the execution run is still active.
+    // A stale timestamp from a completed/failed run should not block completion.
+    if (issue.executionRunId) {
+      const [run] = await db
+        .select({ status: heartbeatRuns.status })
+        .from(heartbeatRuns)
+        .where(eq(heartbeatRuns.id, issue.executionRunId))
+        .limit(1);
+      if (run && (run.status === "queued" || run.status === "running")) {
+        return {
+          pass: false,
+          message: "Execution lock is still held. The checkout was not properly released before completion.",
+          severity: "blocker",
+        };
+      }
+      // Run is completed/failed/missing — stale lock, treat as released
+      return { pass: true, message: "Execution lock stale (run finished) — treating as released.", severity: "info" };
+    }
+    // executionLockedAt is set but executionRunId is null — orphaned timestamp, clear it
+    return { pass: true, message: "Execution lock orphaned (no run) — treating as released.", severity: "info" };
   }
 
   // --- Main gate ---

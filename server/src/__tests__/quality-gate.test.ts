@@ -5,7 +5,7 @@ import {
   getQualityState,
 } from "../services/quality-gate.ts";
 import { DEFAULT_QUALITY_GATE_CONFIG } from "@zeroinc/shared";
-import { issueComments, agents } from "@zeroinc/db";
+import { issueComments, agents, heartbeatRuns } from "@zeroinc/db";
 
 // ---------------------------------------------------------------------------
 // Mock DB — routes queries by table reference
@@ -14,10 +14,11 @@ import { issueComments, agents } from "@zeroinc/db";
 function createMockDb(options?: {
   commentCount?: number;
   agentRow?: Record<string, unknown> | null;
+  heartbeatRunRow?: Record<string, unknown> | null;
 }) {
   const commentCount = options?.commentCount ?? 1;
   const agentRow = options?.agentRow !== undefined
-    ? options.agentRow
+    ? options?.agentRow
     : {
         totalCompleted: 5,
         totalReopened: 1,
@@ -27,12 +28,19 @@ function createMockDb(options?: {
         qualityStreak: 3,
         lastReopenReasons: [],
       };
+  const heartbeatRunRow = options?.heartbeatRunRow ?? null;
 
   // We identify which table is queried by checking the argument to from()
   function fromFn(table: unknown) {
     if (table === issueComments) {
       return {
         where: vi.fn().mockResolvedValue([{ count: String(commentCount) }]),
+      };
+    }
+    if (table === heartbeatRuns) {
+      const rows = heartbeatRunRow ? [heartbeatRunRow] : [];
+      return {
+        where: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(rows) }),
       };
     }
     // agents table or any other
@@ -307,9 +315,11 @@ describe("Quality Gate Service", () => {
     });
 
     describe("stale lock check", () => {
-      it("fails when execution lock is still held", async () => {
-        const gate = qualityGateService(createMockDb());
-        const ctx = baseIssueContext({ executionLockedAt: new Date() });
+      it("fails when execution lock is held by an active run", async () => {
+        const gate = qualityGateService(createMockDb({
+          heartbeatRunRow: { status: "running" },
+        }));
+        const ctx = baseIssueContext({ executionLockedAt: new Date(), executionRunId: "run-1" });
         const result = await gate.runChecks(ctx, DEFAULT_QUALITY_GATE_CONFIG);
 
         const lockCheck = result.checks.find((c) => c.message.includes("lock"));
@@ -317,22 +327,48 @@ describe("Quality Gate Service", () => {
         expect(lockCheck!.severity).toBe("blocker");
       });
 
-      it("passes when no execution lock", async () => {
+      it("passes when no execution lock fields set", async () => {
         const gate = qualityGateService(createMockDb());
-        const ctx = baseIssueContext({ executionLockedAt: null });
+        const ctx = baseIssueContext({ executionLockedAt: null, executionRunId: null });
         const result = await gate.runChecks(ctx, DEFAULT_QUALITY_GATE_CONFIG);
 
         const lockCheck = result.checks.find((c) => c.message.includes("lock"));
         expect(lockCheck!.pass).toBe(true);
       });
+
+      it("passes when execution run is completed (stale lock)", async () => {
+        const gate = qualityGateService(createMockDb({
+          heartbeatRunRow: { status: "completed" },
+        }));
+        const ctx = baseIssueContext({ executionLockedAt: new Date(), executionRunId: "run-1" });
+        const result = await gate.runChecks(ctx, DEFAULT_QUALITY_GATE_CONFIG);
+
+        const lockCheck = result.checks.find((c) => c.message.includes("lock"));
+        expect(lockCheck!.pass).toBe(true);
+        expect(lockCheck!.message).toContain("stale");
+      });
+
+      it("passes when executionLockedAt set but no runId (orphaned)", async () => {
+        const gate = qualityGateService(createMockDb());
+        const ctx = baseIssueContext({ executionLockedAt: new Date(), executionRunId: null });
+        const result = await gate.runChecks(ctx, DEFAULT_QUALITY_GATE_CONFIG);
+
+        const lockCheck = result.checks.find((c) => c.message.includes("lock"));
+        expect(lockCheck!.pass).toBe(true);
+        expect(lockCheck!.message).toContain("orphaned");
+      });
     });
 
     describe("overall result", () => {
       it("marks as failed when any blocker fails", async () => {
-        const gate = qualityGateService(createMockDb({ commentCount: 0 }));
+        const gate = qualityGateService(createMockDb({
+          commentCount: 0,
+          heartbeatRunRow: { status: "running" },
+        }));
         const ctx = baseIssueContext({
           startedAt: new Date(Date.now() - 3_000),
           executionLockedAt: new Date(),
+          executionRunId: "run-1",
         });
         const result = await gate.runChecks(ctx, DEFAULT_QUALITY_GATE_CONFIG);
 
