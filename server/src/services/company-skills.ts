@@ -1430,24 +1430,39 @@ export function companySkillService(db: Db) {
   const secretsSvc = secretService(db);
 
   async function ensureBundledSkills(companyId: string) {
+    const existing = await db
+      .select({ id: companySkills.id, slug: companySkills.slug, key: companySkills.key })
+      .from(companySkills)
+      .where(eq(companySkills.companyId, companyId));
+    const existingBySlug = new Map(existing.map((row) => [row.slug, row]));
+
     for (const skillsRoot of resolveBundledSkillsRoot()) {
       const stats = await fs.stat(skillsRoot).catch(() => null);
       if (!stats?.isDirectory()) continue;
       const bundledSkills = await readLocalSkillImports(companyId, skillsRoot)
-        .then((skills) => skills.map((skill) => ({
-          ...skill,
-          key: deriveCanonicalSkillKey(companyId, {
-            ...skill,
-            metadata: {
-              ...(skill.metadata ?? {}),
-              sourceKind: "paperclip_bundled",
-            },
-          }),
-          metadata: {
-            ...(skill.metadata ?? {}),
-            sourceKind: "paperclip_bundled",
-          },
-        })))
+        .then((skills) =>
+          skills
+            .map((skill) => ({
+              ...skill,
+              key: deriveCanonicalSkillKey(companyId, {
+                ...skill,
+                metadata: {
+                  ...(skill.metadata ?? {}),
+                  sourceKind: "paperclip_bundled",
+                },
+              }),
+              metadata: {
+                ...(skill.metadata ?? {}),
+                sourceKind: "paperclip_bundled",
+              },
+            }))
+            .filter((skill) => {
+              // Skip if a local_path skill with the same slug already exists
+              const match = existingBySlug.get(skill.slug);
+              if (match && match.key.startsWith("local/")) return false;
+              return true;
+            }),
+        )
         .catch(() => [] as ImportedSkill[]);
       if (bundledSkills.length === 0) continue;
       return upsertImportedSkills(companyId, bundledSkills);
@@ -1920,6 +1935,20 @@ export function companySkillService(db: Db) {
           return normalizeSkillDirectory(skill) !== normalizedSourceDir;
         });
         if (slugConflict) {
+          // If the existing skill is paperclip_bundled and the new one is local_path,
+          // prefer the local version (project workspace is more specific than bundled)
+          const conflictMeta = getSkillMeta(slugConflict);
+          if (asString(conflictMeta.sourceKind) === "paperclip_bundled" && nextSkill.sourceType === "local_path") {
+            const persisted = (await upsertImportedSkills(companyId, [nextSkill]))[0];
+            if (persisted) {
+              await db.delete(companySkills).where(eq(companySkills.id, slugConflict.id));
+              imported.push(persisted);
+              const idx = acceptedSkills.findIndex((s) => s.id === slugConflict.id);
+              if (idx >= 0) acceptedSkills[idx] = persisted;
+              acceptedByKey.set(nextSkill.key, persisted);
+            }
+            continue;
+          }
           conflicts.push({
             slug: nextSkill.slug,
             key: nextSkill.key,
