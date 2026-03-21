@@ -110,6 +110,7 @@ export function reviewPipelineService(db: Db) {
     await db
       .update(issues)
       .set({
+        assigneeAgentId: reviewerAgentId,
         reviewerAgentId: reviewerAgentId,
         originalAssigneeId: issue.assigneeAgentId,
         reviewRequestedAt: new Date(),
