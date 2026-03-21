@@ -31,3 +31,4 @@ export { qualityGateService } from "./quality-gate.js";
 export { reviewPipelineService } from "./review-pipeline.js";
 export { reconcilePersistedRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
+export { generateAgentProfile, AgentProfileGeneratorError } from "./agent-profile-generator.js";

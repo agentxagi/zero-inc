@@ -10,6 +10,7 @@ import {
   createAgentHireSchema,
   createAgentSchema,
   deriveAgentUrlKey,
+  generateAgentProfileSchema,
   isUuidLike,
   resetAgentSessionSchema,
   testAdapterEnvironmentSchema,
@@ -41,6 +42,8 @@ import {
   secretService,
   syncInstructionsBundleConfigFromFilePath,
   workspaceOperationService,
+  generateAgentProfile,
+  AgentProfileGeneratorError,
 } from "../services/index.js";
 import { conflict, forbidden, notFound, unprocessable } from "../errors.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
@@ -1154,6 +1157,38 @@ export function agentRoutes(db: Db) {
 
     res.json(state);
   });
+
+  router.post(
+    "/companies/:companyId/agents/generate",
+    validate(generateAgentProfileSchema),
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      await assertCanCreateAgentsForCompany(req, companyId);
+
+      try {
+        const profile = await generateAgentProfile(req.body.description);
+        res.json({
+          profile,
+          hirePayload: {
+            name: profile.displayName,
+            role: profile.role,
+            title: profile.title,
+            adapterType: "claude_local" as const,
+            adapterConfig: {
+              promptTemplate: profile.systemPrompt,
+            },
+            capabilities: profile.capabilities.join(", "),
+          },
+        });
+      } catch (err) {
+        if (err instanceof AgentProfileGeneratorError) {
+          res.status(502).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+    },
+  );
 
   router.post("/companies/:companyId/agent-hires", validate(createAgentHireSchema), async (req, res) => {
     const companyId = req.params.companyId as string;

@@ -111,6 +111,8 @@ export {
   type ResetAgentSession,
   type TestAdapterEnvironment,
   type UpdateAgentPermissions,
+  generateAgentProfileSchema,
+  type GenerateAgentProfile,
 } from "./agent.js";
 
 export {

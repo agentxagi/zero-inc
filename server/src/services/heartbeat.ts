@@ -3777,6 +3777,27 @@ export function heartbeatService(db: Db) {
         const elapsedMs = now.getTime() - baseline;
         if (elapsedMs < policy.intervalSec * 1000) continue;
 
+        // Skip timer-based wake if agent has no open assignments.
+        // Wake-on-demand (mentions, assignments, approvals) is unaffected.
+        const runtimeCfg = parseObject(agent.runtimeConfig);
+        const hbCfg = parseObject(runtimeCfg.heartbeat);
+        const skipEmptyTimerWake = asBoolean(hbCfg.skipEmptyTimerWake, true);
+        if (skipEmptyTimerWake) {
+          const [{ count: openCount }] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(issues)
+            .where(
+              and(
+                eq(issues.assigneeAgentId, agent.id),
+                inArray(issues.status, ["todo", "in_progress", "blocked", "in_review"]),
+              ),
+            );
+          if (Number(openCount ?? 0) === 0) {
+            skipped += 1;
+            continue;
+          }
+        }
+
         const run = await enqueueWakeup(agent.id, {
           source: "timer",
           triggerDetail: "system",

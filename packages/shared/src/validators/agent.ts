@@ -124,3 +124,9 @@ export const updateAgentPermissionsSchema = z.object({
 });
 
 export type UpdateAgentPermissions = z.infer<typeof updateAgentPermissionsSchema>;
+
+export const generateAgentProfileSchema = z.object({
+  description: z.string().min(10).max(2000),
+});
+
+export type GenerateAgentProfile = z.infer<typeof generateAgentProfileSchema>;

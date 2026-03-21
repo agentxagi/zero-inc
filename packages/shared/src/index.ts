@@ -366,6 +366,7 @@ export {
   testAdapterEnvironmentSchema,
   agentPermissionsSchema,
   updateAgentPermissionsSchema,
+  generateAgentProfileSchema,
   type CreateAgent,
   type CreateAgentHire,
   type UpdateAgent,
