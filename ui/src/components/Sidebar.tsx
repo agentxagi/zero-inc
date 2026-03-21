@@ -10,6 +10,7 @@ import {
   Network,
   Boxes,
   Repeat,
+  ShieldCheck,
   Settings,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -109,6 +110,7 @@ export function Sidebar() {
 
         <SidebarSection label="Company">
           <SidebarNavItem to="/org" label="Org" icon={Network} />
+          <SidebarNavItem to="/approvals/pending" label="Approvals" icon={ShieldCheck} />
           <SidebarNavItem to="/skills" label="Skills" icon={Boxes} />
           <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
           <SidebarNavItem to="/activity" label="Activity" icon={History} />
