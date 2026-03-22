@@ -32,6 +32,7 @@ import {
   routineService,
   workProductService,
 } from "../services/index.js";
+import { governanceSettingsService } from "../services/governance-settings.js";
 import { logger } from "../middleware/logger.js";
 import { forbidden, HttpError, unauthorized } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
@@ -1075,6 +1076,22 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     if (req.actor.type === "agent" && req.actor.agentId !== req.body.agentId) {
       res.status(403).json({ error: "Agent can only checkout as itself" });
+      return;
+    }
+
+    // WIP limit check — reject if agent has too many in_progress tasks
+    const govSvc = governanceSettingsService(db);
+    const wipLimit = await govSvc.getWipLimitForAgent(req.body.agentId);
+    const currentWip = await govSvc.countInProgressForAgent(req.body.agentId);
+    // If this issue is already in_progress for this agent, don't count it against the limit
+    const isRecheckout = issue.status === "in_progress" && issue.assigneeAgentId === req.body.agentId;
+    const effectiveWip = isRecheckout ? currentWip - 1 : currentWip;
+    if (effectiveWip >= wipLimit) {
+      res.status(409).json({
+        error: `WIP limit reached: agent has ${currentWip} in_progress tasks (limit: ${wipLimit}). Complete an existing task before checking out a new one.`,
+        currentWip,
+        wipLimit,
+      });
       return;
     }
 

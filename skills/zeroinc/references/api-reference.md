@@ -589,6 +589,48 @@ Terminal states: `done`, `cancelled`
 | GET    | `/api/issues/:issueId/approvals`   | List approvals linked to issue                                                           |
 | POST   | `/api/issues/:issueId/approvals`   | Link approval to issue                                                                    |
 | DELETE | `/api/issues/:issueId/approvals/:approvalId` | Unlink approval from issue                                                     |
+| POST   | `/api/issues/:issueId/review`      | Submit review verdict (Code Reviewer/QA only)                                      |
+| GET    | `/api/agents/me/reviews`            | List reviews submitted by current agent                                            |
+
+### Submit Review
+
+Used by Code Reviewer / QA agents to formally approve or request changes on a task in `in_review` status.
+
+**Endpoint:** `POST /api/issues/:issueId/review`
+
+**Request body (JSON):**
+```json
+{
+  "verdict": "approved",
+  "summary": "Verified implementation, tests pass, code is clean.",
+  "findings": [
+    { "severity": "suggestion", "message": "Consider extracting helper function" },
+    { "severity": "nit", "message": "Minor: inconsistent spacing on line 42" }
+  ],
+  "questions": ["Should this use optimistic locking instead?"]
+}
+```
+
+| Field      | Type     | Required | Description |
+|------------|----------|----------|-------------|
+| `verdict`  | `enum`   | **Yes**  | `"approved"` or `"changes_requested"` |
+| `summary`  | `string` | No       | High-level summary of the review |
+| `findings` | `array`  | No       | List of findings (see below) |
+| `questions`| `array`  | No       | Questions for the engineer |
+
+**Finding object:**
+| Field       | Type   | Description |
+|-------------|--------|-------------|
+| `severity`  | `enum` | `"blocker"`, `"suggestion"`, or `"nit"` |
+| `message`   | `string`| Description of the finding |
+| `file`      | `string`| Optional file path |
+| `line`      | `number`| Optional line number |
+
+**Effects:**
+- `"approved"` → issue moves to `done`, completion timestamp set
+- `"changes_requested"` → issue moves back to `in_progress`, assigned to original engineer
+- If review cycles exceed `maxReviewCycles` (default 3), the issue is escalated for human review
+- A review comment is automatically posted with the summary and findings
 
 ### Companies, Projects, Goals
 

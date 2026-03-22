@@ -142,6 +142,48 @@ export function qualityGateService(db: Db) {
     return { pass: true, message: `Completion comment present (${count} comment${count > 1 ? "s" : ""} on issue).`, severity: "info" };
   }
 
+  async function checkVerificationEvidence(issue: IssueContext): Promise<QualityCheckResult> {
+    // Fetch all comments for this issue (reverse chronological)
+    const comments = await db
+      .select({ body: issueComments.body })
+      .from(issueComments)
+      .where(eq(issueComments.issueId, issue.id))
+      .orderBy(sql`${issueComments.createdAt} DESC`)
+      .limit(5);
+
+    // Look for verification evidence in the latest comments
+    const verificationKeywords = [
+      "verification", "verified", "curl", "npm test", "tsc", "screenshot",
+      "http 200", "all passing", "grep", "diff", "confirmed", "checked",
+      "tested", "response", "status code", "deployed to", "uploaded to",
+      "file exists", "agent-browser",
+    ];
+
+    const bodyLower = comments.map(c => (c.body ?? "").toLowerCase()).join(" ");
+    const hasVerification = verificationKeywords.some(kw => bodyLower.includes(kw));
+
+    const hasStructuredFormat =
+      bodyLower.includes("### verification") ||
+      bodyLower.includes("### output") ||
+      bodyLower.includes("### what was done") ||
+      bodyLower.includes("## done");
+
+    if (hasVerification || hasStructuredFormat) {
+      return {
+        pass: true,
+        message: `Verification evidence found (${hasStructuredFormat ? "structured format" : "keywords"}).`,
+        severity: "info",
+      };
+    }
+
+    // Warning (not blocker) — soft enforcement
+    return {
+      pass: true,
+      message: "Completion comment lacks verification evidence. Consider adding proof of work (curl results, test output, file checks).",
+      severity: "warning",
+    };
+  }
+
   async function checkDurationSanity(
     issue: IssueContext,
     minimumDurationSeconds: number,
@@ -215,6 +257,7 @@ export function qualityGateService(db: Db) {
     if (config.requireComment) {
       checks.push(await checkCommentRequired(issue));
     }
+    checks.push(await checkVerificationEvidence(issue));
     checks.push(await checkDurationSanity(issue, config.requireMinimumDuration));
     checks.push(await checkNoStaleLock(issue));
 

@@ -91,7 +91,7 @@ export function delegationRulesService(db: Db) {
       action.assigneeAgentId = rule.assignToAgentId ?? null;
       action.assigneeUserId = rule.assignToUserId ?? null;
     }
-    if (rule.ruleType === "priority" && rule.setPriority) {
+    if (rule.setPriority && (rule.ruleType === "assign" || rule.ruleType === "priority" || rule.ruleType === "escalate")) {
       action.priority = rule.setPriority;
     }
     if (rule.ruleType === "escalate") {

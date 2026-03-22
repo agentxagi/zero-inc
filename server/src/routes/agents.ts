@@ -57,6 +57,7 @@ import { redactEventPayload } from "../redaction.js";
 import { redactCurrentUserValue } from "../log-redaction.js";
 import { renderOrgChartSvg, renderOrgChartPng, type OrgNode, type OrgChartStyle, ORG_CHART_STYLES } from "./org-chart-svg.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
+import { governanceSettingsService } from "../services/governance-settings.js";
 import { runClaudeLogin } from "@zeroinc/adapter-claude-local/server";
 import {
   DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
@@ -2338,6 +2339,174 @@ export function agentRoutes(db: Db) {
       agentName: agent.name,
       adapterType: agent.adapterType,
     });
+  });
+
+  // --- Agent Governance Settings ---
+
+  // GET /api/agents/:id/settings — get agent-specific governance settings
+  router.get("/agents/:id/settings", async (req, res) => {
+    const id = req.params.id as string;
+    const agent = await svc.getById(id);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+
+    const govSvc = governanceSettingsService(db);
+    const [agentSettings, globalSettings, wipLimit] = await Promise.all([
+      govSvc.getAgentSettings(id),
+      govSvc.get(),
+      govSvc.getWipLimitForAgent(id),
+    ]);
+
+    res.json({
+      agent: agentSettings,
+      global: globalSettings,
+      effectiveWipLimit: wipLimit,
+    });
+  });
+
+  // PATCH /api/agents/:id/settings — update agent-specific governance settings (PM Agent, CTO, board only)
+  router.patch("/agents/:id/settings", async (req, res) => {
+    const id = req.params.id as string;
+    const agent = await svc.getById(id);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+
+    // Authorization: only board users, CTO role, or PM role agents can modify settings
+    const actorRole = agent?.role;
+    if (req.actor.type === "agent") {
+      if (actorRole !== "cto" && actorRole !== "pm") {
+        res.status(403).json({ error: "Only CTO or PM agents can modify governance settings" });
+        return;
+      }
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const patch: Record<string, unknown> = {};
+    if (typeof body.wipLimit === "number") {
+      if (body.wipLimit < 1 || body.wipLimit > 50) {
+        res.status(400).json({ error: "wipLimit must be between 1 and 50" });
+        return;
+      }
+      patch.wipLimit = body.wipLimit;
+    }
+    if (body.staleOverrides && typeof body.staleOverrides === "object") {
+      patch.staleOverrides = body.staleOverrides;
+    }
+    if (Object.keys(patch).length === 0) {
+      res.status(400).json({ error: "No valid settings provided" });
+      return;
+    }
+
+    const govSvc = governanceSettingsService(db);
+    const updated = await govSvc.updateAgentSettings(id, patch);
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: agent.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "agent.settings_updated",
+      entityType: "agent",
+      entityId: id,
+      details: { settings: patch },
+    });
+
+    res.json(updated);
+  });
+
+  // GET /api/governance-settings — get global governance settings
+  router.get("/governance-settings", async (req, _res, next) => {
+    try {
+      // Determine companyId from actor context
+      const companyId = req.actor.type === "agent"
+        ? req.actor.agentId
+          ? (await svc.getById(req.actor.agentId))?.companyId ?? null
+          : null
+        : null;
+      if (!companyId) {
+        _res.status(400).json({ error: "Cannot determine company context" });
+        return;
+      }
+      assertCompanyAccess(req, companyId);
+
+      const govSvc = governanceSettingsService(db);
+      const settings = await govSvc.get();
+      _res.json(settings);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // PATCH /api/governance-settings — update global governance settings (board/CTO only)
+  router.patch("/governance-settings", async (req, res, next) => {
+    try {
+      const companyId = req.actor.type === "agent"
+        ? req.actor.agentId
+          ? (await svc.getById(req.actor.agentId))?.companyId ?? null
+          : null
+        : null;
+      if (!companyId) {
+        res.status(400).json({ error: "Cannot determine company context" });
+        return;
+      }
+      assertCompanyAccess(req, companyId);
+
+      if (req.actor.type === "agent") {
+        const agent = req.actor.agentId ? await svc.getById(req.actor.agentId) : null;
+        if (agent?.role !== "cto" && agent?.role !== "pm") {
+          res.status(403).json({ error: "Only CTO or PM agents can modify governance settings" });
+          return;
+        }
+      }
+
+      const body = req.body as Record<string, unknown>;
+      const patch: Record<string, unknown> = {};
+      if (typeof body.wipLimitDefault === "number") {
+        if (body.wipLimitDefault < 1 || body.wipLimitDefault > 50) {
+          res.status(400).json({ error: "wipLimitDefault must be between 1 and 50" });
+          return;
+        }
+        patch.wipLimitDefault = body.wipLimitDefault;
+      }
+      if (typeof body.staleInProgressWarnMinutes === "number") patch.staleInProgressWarnMinutes = body.staleInProgressWarnMinutes;
+      if (typeof body.staleInProgressBlockMinutes === "number") patch.staleInProgressBlockMinutes = body.staleInProgressBlockMinutes;
+      if (typeof body.staleBlockedEscalateMinutes === "number") patch.staleBlockedEscalateMinutes = body.staleBlockedEscalateMinutes;
+      if (typeof body.staleInReviewPingMinutes === "number") patch.staleInReviewPingMinutes = body.staleInReviewPingMinutes;
+      if (typeof body.staleDoneNoQualityMinutes === "number") patch.staleDoneNoQualityMinutes = body.staleDoneNoQualityMinutes;
+
+      if (Object.keys(patch).length === 0) {
+        res.status(400).json({ error: "No valid settings provided" });
+        return;
+      }
+
+      const govSvc = governanceSettingsService(db);
+      const updated = await govSvc.update(patch);
+
+      const actor = getActorInfo(req);
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "governance.settings_updated",
+        entityType: "instance",
+        entityId: "governance",
+        details: { settings: patch },
+      });
+
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
   });
 
   return router;

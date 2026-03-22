@@ -944,7 +944,11 @@ export function issueService(db: Db) {
       });
 
       // Quality gate: validate done transitions (enforced at service layer for all paths)
+      // NOTE: Small delay to avoid race condition — agents often POST a completion
+      // comment in the same request batch as the status update. Without this delay,
+      // the comment may not yet be committed when we check for it.
       if (result && result.status === "done" && existing.assigneeAgentId) {
+        await new Promise((r) => setTimeout(r, 500));
         const config = qualityGate.resolveConfig();
         const qualityResult = await qualityGate.runChecks(
           {
@@ -1215,6 +1219,17 @@ export function issueService(db: Db) {
         return { ...current, adoptedFromRunId: null as string | null };
       }
 
+      // No checkout run lock — allow assignee to proceed.
+      // This handles cases where checkoutRunId was cleared (e.g. by a finalized
+      // heartbeat) but the issue is still in_progress assigned to the acting agent.
+      if (
+        current.status === "in_progress" &&
+        current.assigneeAgentId === actorAgentId &&
+        !current.checkoutRunId
+      ) {
+        return { ...current, adoptedFromRunId: null as string | null };
+      }
+
       if (
         actorRunId &&
         current.status === "in_progress" &&
@@ -1353,15 +1368,16 @@ export function issueService(db: Db) {
           .then((rows) => rows[0] ?? null);
 
         if (!anchor) return [];
+        const anchorDate = anchor.createdAt instanceof Date ? anchor.createdAt.toISOString() : String(anchor.createdAt);
         conditions.push(
           order === "asc"
             ? sql<boolean>`(
-                ${issueComments.createdAt} > ${anchor.createdAt}
-                OR (${issueComments.createdAt} = ${anchor.createdAt} AND ${issueComments.id} > ${anchor.id})
+                ${issueComments.createdAt} > ${anchorDate}
+                OR (${issueComments.createdAt} = ${anchorDate} AND ${issueComments.id} > ${anchor.id})
               )`
             : sql<boolean>`(
-                ${issueComments.createdAt} < ${anchor.createdAt}
-                OR (${issueComments.createdAt} = ${anchor.createdAt} AND ${issueComments.id} < ${anchor.id})
+                ${issueComments.createdAt} < ${anchorDate}
+                OR (${issueComments.createdAt} = ${anchorDate} AND ${issueComments.id} < ${anchor.id})
               )`,
         );
       }

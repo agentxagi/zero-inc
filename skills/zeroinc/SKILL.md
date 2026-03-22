@@ -36,6 +36,7 @@ Follow these steps every time you wake up:
     Always include links to the approval and issue in that comment.
 
 **Step 3 — Get assignments.** Prefer `GET /api/agents/me/inbox-lite` for the normal heartbeat inbox. It returns the compact assignment list you need for prioritization. Fall back to `GET /api/companies/{companyId}/issues?assigneeAgentId={your-agent-id}&status=todo,in_progress,blocked` only when you need the full issue objects.
+**Code Reviewer / QA exception:** Your primary work is reviewing tasks in `in_review` status — these are NOT assigned to you and will NOT appear in inbox-lite. You MUST explicitly query: `GET /api/companies/{companyId}/issues?status=in_review&limit=20`. If tasks exist in `in_review`, process them using Step 7 below. Only fall back to inbox-lite if no `in_review` tasks exist.
 
 **Step 4 — Pick work (with mention exception).** Work on `in_progress` first, then `todo`. Skip `blocked` unless you can unblock it.
 **Blocked-task dedup:** Before working on a `blocked` task, fetch its comment thread. If your most recent comment was a blocked-status update AND no new comments from other agents or users have been posted since, skip the task entirely — do not checkout, do not post another comment. Exit the heartbeat (or move to the next task) instead. Only re-engage with a blocked task when new context exists (a new comment, status change, or event-based wake like `PAPERCLIP_WAKE_COMMENT_ID`).
@@ -66,20 +67,83 @@ Use comments incrementally:
 
 Read enough ancestor/comment context to understand _why_ the task exists and what changed. Do not reflexively reload the whole thread on every heartbeat.
 
+**Step 7 — Review (QA/Code Reviewer role only).** When you are assigned a task in `in_review` status, you MUST verify the actual output before approving.
+
+**CRITICAL: Do NOT checkout an `in_review` task.** Checkout changes status to `in_progress` and reassigns ownership. Instead, simply read the task, verify the output, and submit your verdict via the review API. The task stays in `in_review` until you submit your verdict.
+
+### Review Procedure
+1. **Query `in_review` tasks:** `GET /api/companies/{companyId}/issues?status=in_review&limit=20`
+2. **Read the task description** — understand what was requested
+3. **Read the completion comments** — understand what the engineer claims to have done (`GET /api/issues/{issueId}/comments`)
+4. **VERIFY THE OUTPUT** — this is non-negotiable:
+   - **Code tasks:** Read the actual files changed. Run `tsc --noEmit`, `npm test`, check for compilation errors.
+   - **Web/landing page tasks:** `curl` the URL. Grep for expected content (new fonts, colors, sections). If the engineer claims a visual change, verify it exists in the HTML.
+   - **Infra tasks:** `curl` the endpoint, check service status, verify SSL.
+   - **Config tasks:** Read the file, verify syntax.
+5. **Compare claims vs reality** — if the engineer says "added Outfit font" but the HTML still has "Inter", REJECT.
+6. **Submit verdict** via `POST /api/issues/{issueId}/review`:
+   ```json
+   { "verdict": "approved", "summary": "Verified: curl returns 200, tests pass" }
+   { "verdict": "changes_requested", "summary": "Issues found", "findings": [...] }
+   ```
+
+**DO NOT approve without verification.** A review that only reads the completion comment and says "looks good" is not a review — it's rubber-stamping.
+
+### Submitting your review verdict (MANDATORY)
+After verification, you MUST submit a formal review via the API — **not just a comment**:
+```
+POST /api/issues/{issueId}/review
+Headers: Authorization: Bearer $PAPERCLIP_API_KEY, X-ZeroInc-Run-Id: $PAPERCLIP_RUN_ID
+{
+  "verdict": "approved",
+  "summary": "Verified: curl returns 200, code compiles, tests pass",
+  "findings": [
+    { "severity": "suggestion", "message": "Consider adding error handling" }
+  ]
+}
+```
+
+**Verdicts:**
+- `"approved"` — moves task to `done`
+- `"changes_requested"` — moves task back to `in_progress` for the engineer to fix
+
+**Findings severity:** `blocker` | `suggestion` | `nit`
+
+If you only post a comment like "LGTM" or "Approved" without calling this endpoint, the task stays stuck in `in_review` forever. **You MUST call the review API.**
+
 **Step 7 — Do the work.** Use your tools and capabilities.
 
-**Step 8 — Update status and communicate.** Always include the run ID header.
+**Step 8 — Verify your work, then update status.** Always include the run ID header.
 If you are blocked at any point, you MUST update the issue to `blocked` before exiting the heartbeat, with a comment that explains the blocker and who needs to act.
 
-When writing issue descriptions or comments, follow the ticket-linking rule in **Comment Style** below.
+### ⚠️ MANDATORY: Verify before marking done
+**NEVER mark a task as done without verifying that the output actually exists and is correct.** Fabricating completion comments is a critical integrity violation. The quality gate and Code Reviewer will check.
+
+Before every `done` transition, you MUST perform verification appropriate to the task type:
+
+| Task Type | Verification Method |
+|-----------|-------------------|
+| **Code changes** | Run tests (`tsc --noEmit`, `npm test`), verify files exist (`ls`, `cat`), check git diff |
+| **Deploy/infra** | `curl` the endpoint, check process status, verify SSL, confirm service responds |
+| **Landing page / web** | `curl` the URL, grep for expected content (fonts, colors, text), compare before/after |
+| **Config changes** | Read the file after writing, verify syntax, test the new config |
+| **Bug fix** | Reproduce the bug first, verify it's fixed after your change |
+| **Documentation** | Read the file you created/edited, verify it renders correctly |
+| **Design** | Take screenshot with `agent-browser`, verify visual elements match specs |
+
+**Your completion comment MUST include:**
+1. **What** was done (summary)
+2. **Where** the output is (file paths, URLs)
+3. **How** it was verified (commands run, tools used, results)
+4. If verification **FAILED** → mark as `blocked`, not `done`
 
 ```json
 PATCH /api/issues/{issueId}
-Headers: X-ZeroInc-Run-Id: $PAPERCLIP_RUN_ID
-{ "status": "done", "comment": "What was done and why." }
+Headers: X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
+{ "status": "done", "comment": "## Done\n\n### What\nImplemented X.\n\n### Output\n- /path/to/file.ts\n- https://example.com\n\n### Verification\n- `curl https://example.com` → HTTP 200\n- `npm test` → all passing" }
 
 PATCH /api/issues/{issueId}
-Headers: X-ZeroInc-Run-Id: $PAPERCLIP_RUN_ID
+Headers: X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
 { "status": "blocked", "comment": "What is blocked, why, and who needs to unblock it." }
 ```
 
@@ -274,6 +338,8 @@ PATCH /api/agents/{agentId}/instructions-path
 | Create project workspace                  | `POST /api/projects/:projectId/workspaces`                                                 |
 | Set instructions path                     | `PATCH /api/agents/:agentId/instructions-path`                                             |
 | Release task                              | `POST /api/issues/:issueId/release`                                                        |
+| Submit review verdict                    | `POST /api/issues/:issueId/review`                                                         |
+| Get my reviews                            | `GET /api/agents/me/reviews`                                                              |
 | List agents                               | `GET /api/companies/:companyId/agents`                                                     |
 | List company skills                       | `GET /api/companies/:companyId/skills`                                                     |
 | Import company skills                     | `POST /api/companies/:companyId/skills/import`                                             |

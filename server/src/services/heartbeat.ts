@@ -50,6 +50,7 @@ import {
   parseProjectExecutionWorkspacePolicy,
   resolveExecutionWorkspaceMode,
 } from "./execution-workspace-policy.js";
+import { staleDetectionService } from "./stale-detection.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import { redactCurrentUserText, redactCurrentUserValue } from "../log-redaction.js";
 import {
@@ -732,6 +733,7 @@ export function heartbeatService(db: Db) {
   const issuesSvc = issueService(db);
   const executionWorkspacesSvc = executionWorkspaceService(db);
   const workspaceOperationsSvc = workspaceOperationService(db);
+  const staleDetection = staleDetectionService(db);
   const activeRunExecutions = new Set<string>();
   const budgetHooks = {
     cancelWorkForScope: cancelBudgetScopeWork,
@@ -2745,6 +2747,10 @@ export function heartbeatService(db: Db) {
         }
       }
       await finalizeAgentStatus(agent.id, outcome);
+      // Run stale detection after heartbeat completes (non-blocking)
+      void staleDetection.run().catch((err: unknown) =>
+        logger.warn({ err }, "stale detection failed after heartbeat"),
+      );
     } catch (err) {
       const message = redactCurrentUserText(
         err instanceof Error ? err.message : "Unknown adapter failure",

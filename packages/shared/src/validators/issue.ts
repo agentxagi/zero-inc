@@ -155,7 +155,7 @@ export type QualityGateConfig = z.infer<typeof qualityGateConfigSchema>;
 export const DEFAULT_QUALITY_GATE_CONFIG: Required<QualityGateConfig> = {
   enabled: true,
   requireComment: true,
-  requireMinimumDuration: 10,
+  requireMinimumDuration: 5,
   autoReopen: true,
 };
 
