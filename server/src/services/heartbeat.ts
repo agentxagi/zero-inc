@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
-import { and, asc, desc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
 import type { BillingType } from "@zeroinc/shared";
 import {
@@ -3873,7 +3873,10 @@ export function heartbeatService(db: Db) {
             .from(issues)
             .where(
               and(
-                eq(issues.assigneeAgentId, agent.id),
+                or(
+                  eq(issues.assigneeAgentId, agent.id),
+                  eq(issues.reviewerAgentId, agent.id),
+                ),
                 inArray(issues.status, ["todo", "in_progress", "blocked", "in_review"]),
               ),
             );
