@@ -584,7 +584,11 @@ export function issueService(db: Db) {
         );
       }
       if (!filters?.includeRoutineExecutions && !filters?.originKind && !filters?.originId) {
-        conditions.push(ne(issues.originKind, "routine_execution"));
+        const statuses = (filters?.status ?? "").split(",").map((s) => s.trim());
+        const hasReviewStatus = statuses.includes("in_review") || statuses.includes("review_requested");
+        if (!hasReviewStatus) {
+          conditions.push(ne(issues.originKind, "routine_execution"));
+        }
       }
       conditions.push(isNull(issues.hiddenAt));
 
