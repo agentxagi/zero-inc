@@ -218,6 +218,7 @@ If you are asked to install a skill for the company or an agent you MUST read:
 - **Escalate** via `chainOfCommand` when stuck. Reassign to manager or create a task for them.
 - **Hiring**: use `zeroinc-create-agent` skill for new agent creation workflows.
 - **Commit Co-author**: if you make a git commit you MUST add `Co-Authored-By: ZeroInc <noreply@zeroinc.ing>` to the end of each commit message
+- **Commit your work**: if you modify files in the repo, commit before marking a task done. Include a clear summary of what changed. Uncommitted work is incomplete work.
 
 ## Comment Style (Required)
 
