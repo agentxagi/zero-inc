@@ -19,6 +19,7 @@ import {
   projectWorkspaces,
   projects,
 } from "@zeroinc/db";
+import { delegationRulesService, type RuleAction } from "./delegation-rules.js";
 import { extractProjectMentionIds } from "@zeroinc/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import {
@@ -28,6 +29,7 @@ import {
 } from "./execution-workspace-policy.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import { redactCurrentUserText } from "../log-redaction.js";
+import { logger } from "../middleware/logger.js";
 import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallback.js";
 import { getDefaultCompanyGoal } from "./goals.js";
 import { qualityGateService } from "./quality-gate.js";
@@ -319,6 +321,44 @@ export function issueService(db: Db) {
   const instanceSettings = instanceSettingsService(db);
   const qualityGate = qualityGateService(db);
   const reviewPipeline = reviewPipelineService(db);
+  const delegationEngine = delegationRulesService(db);
+
+  /**
+   * Apply delegation rule actions to an issue after creation or status change.
+   * Runs asynchronously — does not block the caller.
+   */
+  async function applyDelegationRules(
+    issueId: string,
+    companyId: string,
+    trigger: "create" | "status_change",
+    ctx: { title: string; priority: string; status: string; statusChangedAt?: Date | null; previousStatus?: string },
+  ) {
+    try {
+      const action = await delegationEngine.evaluate(companyId, trigger, ctx);
+      if (!action) return;
+
+      const patch: Partial<typeof issues.$inferInsert> = { updatedAt: new Date() };
+      if (action.assigneeAgentId !== undefined) patch.assigneeAgentId = action.assigneeAgentId;
+      if (action.assigneeUserId !== undefined) patch.assigneeUserId = action.assigneeUserId;
+      if (action.priority) patch.priority = action.priority;
+
+      const hasUpdate = Object.keys(patch).length > 1; // more than just updatedAt
+      if (hasUpdate) {
+        await db.update(issues).set(patch).where(eq(issues.id, issueId));
+      }
+
+      if (action.commentBody) {
+        await db.insert(issueComments).values({
+          companyId,
+          issueId,
+          body: `## Delegation Rule\n\n${action.commentBody}`,
+        });
+      }
+    } catch (err) {
+      // Log but don't fail the parent operation
+      logger.warn(`[delegation] Failed to apply rules for issue ${issueId}: ${err}`);
+    }
+  }
 
   function redactIssueComment<T extends { body: string }>(comment: T, censorUsernameInLogs: boolean): T {
     return {
@@ -717,7 +757,7 @@ export function issueService(db: Db) {
       if (data.status === "in_progress" && !data.assigneeAgentId && !data.assigneeUserId) {
         throw unprocessable("in_progress issues require an assignee");
       }
-      return db.transaction(async (tx) => {
+      const result = await db.transaction(async (tx) => {
         const defaultCompanyGoal = await getDefaultCompanyGoal(tx, companyId);
         let executionWorkspaceSettings =
           (issueData.executionWorkspaceSettings as Record<string, unknown> | null | undefined) ?? null;
@@ -795,6 +835,15 @@ export function issueService(db: Db) {
         const [enriched] = await withIssueLabels(tx, [issue]);
         return enriched;
       });
+
+      // Fire delegation rules after creation (non-blocking)
+      void applyDelegationRules(result.id, companyId, "create", {
+        title: result.title,
+        priority: result.priority,
+        status: result.status,
+      });
+
+      return result;
     },
 
     update: async (id: string, data: Partial<typeof issues.$inferInsert> & { labelIds?: string[] }) => {
@@ -894,7 +943,7 @@ export function issueService(db: Db) {
         return enriched;
       });
 
-      // Quality gate: validate done transitions (also enforced in routes/issues.ts)
+      // Quality gate: validate done transitions (enforced at service layer for all paths)
       if (result && result.status === "done" && existing.assigneeAgentId) {
         const config = qualityGate.resolveConfig();
         const qualityResult = await qualityGate.runChecks(
@@ -959,6 +1008,17 @@ export function issueService(db: Db) {
       // Track blocked transitions for agent quality score
       if (result && result.status === "blocked" && existing.status !== "blocked" && existing.assigneeAgentId) {
         await qualityGate.incrementBlockedCount(existing.assigneeAgentId);
+      }
+
+      // Fire delegation rules on status change (non-blocking)
+      if (result && issueData.status && issueData.status !== existing.status) {
+        void applyDelegationRules(result.id, existing.companyId, "status_change", {
+          title: result.title,
+          priority: result.priority,
+          status: result.status,
+          statusChangedAt: result.updatedAt,
+          previousStatus: existing.status,
+        });
       }
 
       return result;
