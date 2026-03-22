@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { issuesApi } from "../api/issues";
+import { approvalsApi } from "../api/approvals";
 import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
 import { formatAssigneeUserLabel } from "../lib/assignees";
@@ -20,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { CircleDot, Plus, Filter, ArrowUpDown, Layers, Check, X, ChevronRight, List, Columns3, User, Search } from "lucide-react";
+import { CircleDot, Plus, Filter, ArrowUpDown, Layers, Check, X, ChevronRight, List, Columns3, User, Search, ShieldCheck } from "lucide-react";
 import { KanbanBoard } from "./KanbanBoard";
 import type { Issue } from "@zeroinc/shared";
 
@@ -40,6 +41,7 @@ export type IssueViewState = {
   priorities: string[];
   assignees: string[];
   labels: string[];
+  needsApproval: boolean;
   sortField: "status" | "priority" | "title" | "created" | "updated";
   sortDir: "asc" | "desc";
   groupBy: "status" | "priority" | "assignee" | "none";
@@ -52,6 +54,7 @@ const defaultViewState: IssueViewState = {
   priorities: [],
   assignees: [],
   labels: [],
+  needsApproval: false,
   sortField: "updated",
   sortDir: "desc",
   groupBy: "none",
@@ -89,7 +92,7 @@ function toggleInArray(arr: string[], value: string): string[] {
   return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
 
-function applyFilters(issues: Issue[], state: IssueViewState, currentUserId?: string | null): Issue[] {
+function applyFilters(issues: Issue[], state: IssueViewState, currentUserId?: string | null, approvalIssueIds?: Set<string>): Issue[] {
   let result = issues;
   if (state.statuses.length > 0) result = result.filter((i) => state.statuses.includes(i.status));
   if (state.priorities.length > 0) result = result.filter((i) => state.priorities.includes(i.priority));
@@ -104,6 +107,9 @@ function applyFilters(issues: Issue[], state: IssueViewState, currentUserId?: st
     });
   }
   if (state.labels.length > 0) result = result.filter((i) => (i.labelIds ?? []).some((id) => state.labels.includes(id)));
+  if (state.needsApproval && approvalIssueIds) {
+    result = result.filter((i) => approvalIssueIds.has(i.id));
+  }
   return result;
 }
 
@@ -135,6 +141,7 @@ function countActiveFilters(state: IssueViewState): number {
   if (state.priorities.length > 0) count++;
   if (state.assignees.length > 0) count++;
   if (state.labels.length > 0) count++;
+  if (state.needsApproval) count++;
   return count;
 }
 
@@ -156,6 +163,7 @@ interface IssuesListProps {
   issueLinkState?: unknown;
   initialAssignees?: string[];
   initialSearch?: string;
+  approvalIssueIds?: Set<string>;
   onSearchChange?: (search: string) => void;
   onUpdateIssue: (id: string, data: Record<string, unknown>) => void;
 }
@@ -171,6 +179,7 @@ export function IssuesList({
   issueLinkState,
   initialAssignees,
   initialSearch,
+  approvalIssueIds,
   onSearchChange,
   onUpdateIssue,
 }: IssuesListProps) {
@@ -240,9 +249,9 @@ export function IssuesList({
 
   const filtered = useMemo(() => {
     const sourceIssues = normalizedIssueSearch.length > 0 ? searchedIssues : issues;
-    const filteredByControls = applyFilters(sourceIssues, viewState, currentUserId);
+    const filteredByControls = applyFilters(sourceIssues, viewState, currentUserId, approvalIssueIds);
     return sortIssues(filteredByControls, viewState);
-  }, [issues, searchedIssues, viewState, normalizedIssueSearch, currentUserId]);
+  }, [issues, searchedIssues, viewState, normalizedIssueSearch, currentUserId, approvalIssueIds]);
 
   const { data: labels } = useQuery({
     queryKey: queryKeys.issues.labels(selectedCompanyId!),
@@ -402,6 +411,20 @@ export function IssuesList({
                         </button>
                       );
                     })}
+                    {approvalIssueIds && approvalIssueIds.size > 0 && (
+                      <button
+                        className={`px-2.5 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
+                          viewState.needsApproval
+                            ? "bg-amber-600 text-white border-amber-600"
+                            : "border-amber-300 dark:border-amber-700/50 text-amber-700 dark:text-amber-300 hover:border-amber-400"
+                        }`}
+                        onClick={() => updateView({ needsApproval: !viewState.needsApproval })}
+                      >
+                        <ShieldCheck className="h-3 w-3" />
+                        Needs my approval
+                        <span className="font-medium">{approvalIssueIds.size}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 

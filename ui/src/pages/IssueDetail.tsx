@@ -21,6 +21,7 @@ import { CommentThread } from "../components/CommentThread";
 import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
 import { IssueProperties } from "../components/IssueProperties";
 import { LiveRunWidget } from "../components/LiveRunWidget";
+import { HumanApprovalWidget } from "../components/HumanApprovalWidget";
 import type { MentionOption } from "../components/MarkdownEditor";
 import { ScrollToBottom } from "../components/ScrollToBottom";
 import { StatusIcon } from "../components/StatusIcon";
@@ -984,6 +985,14 @@ export function IssueDetail() {
       ) : null}
 
       <Separator />
+
+      {/* Human approval flow — prominent CTA when approvals are pending */}
+      {resolvedCompanyId && linkedApprovals && linkedApprovals.length > 0 && (
+        <HumanApprovalWidget
+          approvals={linkedApprovals}
+          companyId={resolvedCompanyId}
+        />
+      )}
 
       <Tabs value={detailTab} onValueChange={setDetailTab} className="space-y-3">
         <TabsList variant="line" className="w-full justify-start gap-1">

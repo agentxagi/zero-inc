@@ -21,4 +21,21 @@ export const approvalsApi = {
   addComment: (id: string, body: string) =>
     api.post<ApprovalComment>(`/approvals/${id}/comments`, { body }),
   listIssues: (id: string) => api.get<Issue[]>(`/approvals/${id}/issues`),
+  /** Fetch all issue IDs linked to pending approvals in a company. */
+  pendingApprovalIssueIds: async (companyId: string): Promise<string[]> => {
+    const approvals = await api.get<Approval[]>(
+      `/companies/${companyId}/approvals?status=pending`,
+    );
+    if (approvals.length === 0) return [];
+    const results = await Promise.all(
+      approvals.map((a) => api.get<Issue[]>(`/approvals/${a.id}/issues`)),
+    );
+    const ids: string[] = [];
+    for (const issues of results) {
+      for (const issue of issues) {
+        ids.push(issue.id);
+      }
+    }
+    return [...new Set(ids)];
+  },
 };

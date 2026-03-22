@@ -2,6 +2,7 @@ import { useEffect, useMemo, useCallback, useRef } from "react";
 import { useLocation, useSearchParams } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { issuesApi } from "../api/issues";
+import { approvalsApi } from "../api/approvals";
 import { agentsApi } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
 import { useCompany } from "../context/CompanyContext";
@@ -57,6 +58,12 @@ export function Issues() {
     refetchInterval: 5000,
   });
 
+  const { data: pendingApprovalIssueIds } = useQuery({
+    queryKey: ["approvals-pending-issue-ids", selectedCompanyId],
+    queryFn: () => approvalsApi.pendingApprovalIssueIds(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
   const liveIssueIds = useMemo(() => {
     const ids = new Set<string>();
     for (const run of liveRuns ?? []) {
@@ -64,6 +71,11 @@ export function Issues() {
     }
     return ids;
   }, [liveRuns]);
+
+  const approvalIssueIds = useMemo(() => {
+    if (!pendingApprovalIssueIds) return undefined;
+    return new Set(pendingApprovalIssueIds);
+  }, [pendingApprovalIssueIds]);
 
   const issueLinkState = useMemo(
     () =>
@@ -103,6 +115,7 @@ export function Issues() {
       error={error as Error | null}
       agents={agents}
       liveIssueIds={liveIssueIds}
+      approvalIssueIds={approvalIssueIds}
       viewStateKey="zeroinc:issues-view"
       issueLinkState={issueLinkState}
       initialAssignees={searchParams.get("assignee") ? [searchParams.get("assignee")!] : undefined}
