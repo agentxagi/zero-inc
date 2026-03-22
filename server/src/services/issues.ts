@@ -33,7 +33,7 @@ import { logger } from "../middleware/logger.js";
 import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallback.js";
 import { getDefaultCompanyGoal } from "./goals.js";
 import { qualityGateService } from "./quality-gate.js";
-import { reviewPipelineService } from "./review-pipeline.js";
+import { reviewPipelineService, type ReviewPipelineWakeupDeps } from "./review-pipeline.js";
 
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
@@ -317,10 +317,10 @@ function withActiveRuns(
   }));
 }
 
-export function issueService(db: Db) {
+export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
   const instanceSettings = instanceSettingsService(db);
   const qualityGate = qualityGateService(db);
-  const reviewPipeline = reviewPipelineService(db);
+  const reviewPipeline = reviewPipelineService(db, wakeupDeps);
   const delegationEngine = delegationRulesService(db);
 
   /**

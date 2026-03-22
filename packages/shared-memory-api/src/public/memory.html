@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroInc — Memory Board</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e1e4e8; min-height: 100vh; }
+  header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  .badge { background: #1f6feb33; color: #58a6ff; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+  main { max-width: 1200px; margin: 24px auto; padding: 0 24px; }
+  .tabs { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 1px solid #30363d; }
+  .tab { padding: 10px 20px; cursor: pointer; border-bottom: 2px solid transparent; color: #8b949e; font-size: 14px; }
+  .tab.active { color: #e1e4e8; border-bottom-color: #58a6ff; }
+  .tab:hover { color: #e1e4e8; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .card-key { font-family: monospace; font-size: 14px; color: #58a6ff; }
+  .card-meta { font-size: 12px; color: #8b949e; }
+  .card-value { font-size: 14px; color: #c9d1d9; white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto; }
+  .btn { padding: 6px 12px; border: 1px solid #30363d; border-radius: 6px; background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 12px; }
+  .btn:hover { background: #30363d; }
+  .btn-danger { border-color: #f8514944; color: #f85149; }
+  .btn-danger:hover { background: #f8514922; }
+  .btn-primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .btn-primary:hover { background: #388bfd; }
+  .form-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .form-row input, .form-row textarea { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px; color: #e1e4e8; font-size: 14px; }
+  .form-row input:focus, .form-row textarea:focus { outline: none; border-color: #58a6ff; }
+  .empty { text-align: center; color: #8b949e; padding: 40px; font-size: 14px; }
+  .count { font-size: 12px; color: #8b949e; margin-bottom: 12px; }
+  #toast { position: fixed; bottom: 24px; right: 24px; background: #1f6feb; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Memory Board</h1>
+  <span class="badge">ZeroInc</span>
+</header>
+<main>
+  <div class="tabs">
+    <div class="tab active" data-tab="agent">Agent Memory</div>
+    <div class="tab" data-tab="shared">Shared Memory</div>
+  </div>
+
+  <div class="form-row">
+    <input type="text" id="keyInput" placeholder="Key (e.g. last_check_time)">
+    <textarea id="valueInput" rows="1" placeholder="Value" style="min-height:36px;resize:vertical;"></textarea>
+    <button class="btn btn-primary" id="saveBtn">Save</button>
+  </div>
+
+  <div class="count" id="count"></div>
+  <div id="entries"></div>
+</main>
+<div id="toast"></div>
+
+<script>
+const API = '';
+let currentTab = 'agent';
+let agentId = '';
+let companyId = '';
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function headers() {
+  const h = { 'Content-Type': 'application/json' };
+  const token = localStorage.getItem('token');
+  if (token) h['Authorization'] = `Bearer ${token}`;
+  else { h['X-Agent-Id'] = agentId; h['X-Company-Id'] = companyId; }
+  return h;
+}
+
+async function load() {
+  agentId = localStorage.getItem('agentId') || prompt('Enter Agent ID:');
+  companyId = localStorage.getItem('companyId') || prompt('Enter Company ID:');
+  if (agentId) localStorage.setItem('agentId', agentId);
+  if (companyId) localStorage.setItem('companyId', companyId);
+  await refresh();
+}
+
+async function refresh() {
+  const entries = document.getElementById('entries');
+  const count = document.getElementById('count');
+  let url;
+  if (currentTab === 'agent') url = `${API}/api/agents/${agentId}/memory`;
+  else url = `${API}/api/companies/${companyId}/shared-memory`;
+
+  try {
+    const resp = await fetch(url, { headers: headers() });
+    if (!resp.ok) { entries.innerHTML = `<div class="empty">Error: ${resp.status}</div>`; return; }
+    const data = await resp.json();
+    const keys = data.keys || [];
+    count.textContent = `${keys.length} entries`;
+
+    if (keys.length === 0) { entries.innerHTML = '<div class="empty">No entries yet</div>'; return; }
+
+    entries.innerHTML = keys.map(k => `
+      <div class="card">
+        <div class="card-header">
+          <span class="card-key">${esc(k.key)}</span>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <span class="card-meta">${k.updated_at || ''}</span>
+            ${k.written_by_agent_id ? `<span class="card-meta">by ${k.written_by_agent_id.slice(0,8)}</span>` : ''}
+            <button class="btn btn-danger" onclick="del('${esc(k.key)}')">Delete</button>
+          </div>
+        </div>
+        <div class="card-value">${esc(k.value)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    entries.innerHTML = `<div class="empty">Failed to load: ${e.message}</div>`;
+  }
+}
+
+async function save() {
+  const key = document.getElementById('keyInput').value.trim();
+  const value = document.getElementById('valueInput').value;
+  if (!key) return toast('Key is required');
+
+  let url, body;
+  if (currentTab === 'agent') {
+    url = `${API}/api/agents/${agentId}/memory`;
+    body = JSON.stringify({ key, value });
+  } else {
+    url = `${API}/api/companies/${companyId}/shared-memory`;
+    body = JSON.stringify({ key, value });
+  }
+
+  try {
+    const resp = await fetch(url, { method: 'POST', headers: headers(), body });
+    if (!resp.ok) { const d = await resp.json(); toast(d.error || 'Error'); return; }
+    toast('Saved');
+    document.getElementById('keyInput').value = '';
+    document.getElementById('valueInput').value = '';
+    refresh();
+  } catch (e) { toast(e.message); }
+}
+
+async function del(key) {
+  if (!confirm(`Delete "${key}"?`)) return;
+  let url;
+  if (currentTab === 'agent') url = `${API}/api/agents/${agentId}/memory/${encodeURIComponent(key)}`;
+  else url = `${API}/api/companies/${companyId}/shared-memory/${encodeURIComponent(key)}`;
+  await fetch(url, { method: 'DELETE', headers: headers() });
+  toast('Deleted');
+  refresh();
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  currentTab = t.dataset.tab;
+  refresh();
+}));
+document.getElementById('saveBtn').addEventListener('click', save);
+document.getElementById('valueInput').addEventListener('keydown', e => { if (e.key === 'Enter' && e.ctrlKey) save(); });
+
+load();
+</script>
+</body>
+</html>

@@ -139,9 +139,9 @@ function normalizeWebhookTimestampMs(rawTimestamp: string) {
 }
 
 export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeupDeps } = {}) {
-  const issueSvc = issueService(db);
-  const secretsSvc = secretService(db);
   const heartbeat = deps.heartbeat ?? heartbeatService(db);
+  const issueSvc = issueService(db, { wakeup: heartbeat.wakeup });
+  const secretsSvc = secretService(db);
 
   async function getRoutineById(id: string) {
     return db

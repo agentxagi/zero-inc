@@ -39,11 +39,22 @@ export const DEFAULT_REVIEW_PIPELINE_CONFIG: Required<ReviewPipelineConfig> = {
   reviewerRoles: ["qa", "code_reviewer"],
 };
 
+// Wakeup dependency - injected to enable immediate agent notification
+export interface ReviewPipelineWakeupDeps {
+  wakeup: (agentId: string, opts: {
+    source?: "timer" | "assignment" | "on_demand" | "automation";
+    triggerDetail?: "manual" | "ping" | "callback" | "system";
+    reason?: string | null;
+    payload?: Record<string, unknown> | null;
+    contextSnapshot?: Record<string, unknown>;
+  }) => Promise<unknown>;
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
-export function reviewPipelineService(db: Db) {
+export function reviewPipelineService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
   // --- Config resolution ---
 
   function resolveConfig(companyConfig?: Partial<ReviewPipelineConfig> | null): Required<ReviewPipelineConfig> {
@@ -116,6 +127,19 @@ export function reviewPipelineService(db: Db) {
         updatedAt: new Date(),
       })
       .where(eq(issues.id, issueId));
+
+    // Wake the reviewer immediately so they don't wait for timer
+    if (wakeupDeps?.wakeup) {
+      void wakeupDeps.wakeup(reviewerAgentId, {
+        source: "assignment",
+        triggerDetail: "system",
+        reason: "review_assigned",
+        payload: { issueId },
+        contextSnapshot: { issueId, source: "review_pipeline" },
+      }).catch(() => {
+        // Ignore wakeup errors — reviewer will still be notified by timer
+      });
+    }
 
     return reviewerAgentId;
   }
@@ -265,6 +289,19 @@ export function reviewPipelineService(db: Db) {
         updatedAt: new Date(),
       })
       .where(eq(issues.id, issueId));
+
+    // Wake up original engineer so they know to address changes
+    if (wakeupDeps?.wakeup && originalAssigneeId) {
+      void wakeupDeps.wakeup(originalAssigneeId, {
+        source: "assignment",
+        triggerDetail: "system",
+        reason: "review_changes_requested",
+        payload: { issueId },
+        contextSnapshot: { issueId, source: "review_pipeline" },
+      }).catch(() => {
+        // Ignore wakeup errors — engineer will still be notified by timer
+      });
+    }
 
     return { success: true };
   }

@@ -1,16 +1,17 @@
 import { Router, type Request, type Response } from "express";
 import type { Db } from "@zeroinc/db";
 import { submitReviewSchema } from "@zeroinc/shared";
-import { reviewPipelineService } from "../services/review-pipeline.js";
+import { reviewPipelineService, type ReviewPipelineWakeupDeps } from "../services/review-pipeline.js";
 import { validate } from "../middleware/validate.js";
-import { issueService } from "../services/index.js";
+import { issueService, heartbeatService } from "../services/index.js";
 import { forbidden, notFound } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 
 export function reviewRoutes(db: Db) {
   const router = Router();
   const svc = issueService(db);
-  const reviewPipeline = reviewPipelineService(db);
+  const heartbeat = heartbeatService(db);
+  const reviewPipeline = reviewPipelineService(db, { wakeup: heartbeat.wakeup });
 
   // POST /issues/:id/review — submit a review verdict
   router.post(

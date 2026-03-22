@@ -44,9 +44,9 @@ const MAX_ISSUE_COMMENT_LIMIT = 500;
 
 export function issueRoutes(db: Db, storage: StorageService) {
   const router = Router();
-  const svc = issueService(db);
   const access = accessService(db);
   const heartbeat = heartbeatService(db);
+  const svc = issueService(db, { wakeup: heartbeat.wakeup });
   const agentsSvc = agentService(db);
   const projectsSvc = projectService(db);
   const goalsSvc = goalService(db);
