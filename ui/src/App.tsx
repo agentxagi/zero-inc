@@ -12,6 +12,7 @@ import { AgentDetail } from "./pages/AgentDetail";
 import { Projects } from "./pages/Projects";
 import { ProjectDetail } from "./pages/ProjectDetail";
 import { Issues } from "./pages/Issues";
+import { MyTasks } from "./pages/MyTasks";
 import { IssueDetail } from "./pages/IssueDetail";
 import { Routines } from "./pages/Routines";
 import { RoutineDetail } from "./pages/RoutineDetail";
@@ -146,6 +147,7 @@ function boardRoutes() {
       <Route path="projects/:projectId/configuration" element={<ProjectDetail />} />
       <Route path="projects/:projectId/budget" element={<ProjectDetail />} />
       <Route path="issues" element={<Issues />} />
+      <Route path="issues/mine" element={<MyTasks />} />
       <Route path="issues/all" element={<Navigate to="/issues" replace />} />
       <Route path="issues/active" element={<Navigate to="/issues" replace />} />
       <Route path="issues/backlog" element={<Navigate to="/issues" replace />} />

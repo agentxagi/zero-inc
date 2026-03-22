@@ -12,6 +12,7 @@ import {
   Repeat,
   ShieldCheck,
   Settings,
+  UserCircle,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
@@ -21,6 +22,8 @@ import { SidebarAgents } from "./SidebarAgents";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { heartbeatsApi } from "../api/heartbeats";
+import { issuesApi } from "../api/issues";
+import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +40,26 @@ export function Sidebar() {
     refetchInterval: 10_000,
   });
   const liveRunCount = liveRuns?.length ?? 0;
+
+  // Count human-assigned tasks for "My Tasks" badge
+  const { data: session } = useQuery({
+    queryKey: queryKeys.auth.session,
+    queryFn: () => authApi.getSession(),
+  });
+  const currentUserId = session?.session?.userId ?? null;
+  const { data: myTaskIssues } = useQuery({
+    queryKey: ["my-tasks-count", selectedCompanyId, currentUserId],
+    queryFn: () =>
+      issuesApi.list(selectedCompanyId!, {
+        assigneeUserId: currentUserId ?? undefined,
+        status: "todo,in_progress,in_review,blocked",
+      }),
+    enabled: !!selectedCompanyId && !!currentUserId,
+    refetchInterval: 15_000,
+  });
+  const myTaskCount = (myTaskIssues ?? []).filter(
+    (i) => !i.assigneeAgentId && i.assigneeUserId,
+  ).length;
 
   function openSearch() {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));
@@ -88,6 +111,14 @@ export function Sidebar() {
             badge={inboxBadge.inbox}
             badgeTone={inboxBadge.failedRuns > 0 ? "danger" : "default"}
             alert={inboxBadge.failedRuns > 0}
+          />
+          <SidebarNavItem
+            to="/issues/mine"
+            label="My Tasks"
+            icon={UserCircle}
+            badge={myTaskCount > 0 ? myTaskCount : undefined}
+            badgeTone="default"
+            alert={myTaskCount > 0}
           />
           <PluginSlotOutlet
             slotTypes={["sidebar"]}
