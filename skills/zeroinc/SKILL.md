@@ -36,7 +36,7 @@ Follow these steps every time you wake up:
     Always include links to the approval and issue in that comment.
 
 **Step 3 — Get assignments.** Prefer `GET /api/agents/me/inbox-lite` for the normal heartbeat inbox. It returns the compact assignment list you need for prioritization. Fall back to `GET /api/companies/{companyId}/issues?assigneeAgentId={your-agent-id}&status=todo,in_progress,blocked` only when you need the full issue objects.
-**Code Reviewer / QA exception:** Your primary work is reviewing tasks in `in_review` status — these are NOT assigned to you and will NOT appear in inbox-lite. You MUST explicitly query: `GET /api/companies/{companyId}/issues?status=in_review&limit=20`. If tasks exist in `in_review`, process them using Step 7 below. Only fall back to inbox-lite if no `in_review` tasks exist.
+**Code Reviewer / QA exception:** Your primary work is reviewing tasks in `in_review` status — these are NOT assigned to you and will NOT appear in inbox-lite. You MUST explicitly query: `GET /api/companies/{companyId}/issues?status=in_review&includeRoutineExecutions=true&limit=20`. If tasks exist in `in_review`, process them using Step 7 below. Only fall back to inbox-lite if no `in_review` tasks exist.
 
 **Step 4 — Pick work (with mention exception).** Work on `in_progress` first, then `todo`. Skip `blocked` unless you can unblock it.
 **Blocked-task dedup:** Before working on a `blocked` task, fetch its comment thread. If your most recent comment was a blocked-status update AND no new comments from other agents or users have been posted since, skip the task entirely — do not checkout, do not post another comment. Exit the heartbeat (or move to the next task) instead. Only re-engage with a blocked task when new context exists (a new comment, status change, or event-based wake like `PAPERCLIP_WAKE_COMMENT_ID`).
@@ -72,7 +72,7 @@ Read enough ancestor/comment context to understand _why_ the task exists and wha
 **CRITICAL: Do NOT checkout an `in_review` task.** Checkout changes status to `in_progress` and reassigns ownership. Instead, simply read the task, verify the output, and submit your verdict via the review API. The task stays in `in_review` until you submit your verdict.
 
 ### Review Procedure
-1. **Query `in_review` tasks:** `GET /api/companies/{companyId}/issues?status=in_review&limit=20`
+1. **Query `in_review` tasks:** `GET /api/companies/{companyId}/issues?status=in_review&includeRoutineExecutions=true&limit=20`
 2. **Read the task description** — understand what was requested
 3. **Read the completion comments** — understand what the engineer claims to have done (`GET /api/issues/{issueId}/comments`)
 4. **VERIFY THE OUTPUT** — this is non-negotiable:
