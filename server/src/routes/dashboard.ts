@@ -38,6 +38,34 @@ export function dashboardRoutes(db: Db) {
   });
 
   /**
+   * GET /api/dashboard/companies/:companyId/agent
+   * Machine-readable system state for agent proactive monitoring.
+   * Returns tasks by status, agent statuses, stale/blocked alerts,
+   * recent completions, and active sprint summary.
+   * Cached for 2 minutes to reduce DB load.
+   */
+  router.get("/companies/:companyId/agent", async (req, res) => {
+    try {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const cacheKey = `agent-dashboard:${companyId}`;
+      const cached = getCached(cacheKey);
+      if (cached) {
+        res.json(cached);
+        return;
+      }
+
+      const data = await svc.agentSummary(companyId);
+      setCache(cacheKey, data);
+      res.json(data);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
+  /**
    * GET /api/dashboard/human
    * Human dashboard endpoint - returns actionable information for Gustavo
    * Uses x-company-id header for company identification

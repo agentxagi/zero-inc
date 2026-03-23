@@ -119,6 +119,8 @@ export function qualityGateService(db: Db) {
       requireComment: companyConfig.requireComment ?? DEFAULT_QUALITY_GATE_CONFIG.requireComment,
       requireMinimumDuration:
         companyConfig.requireMinimumDuration ?? DEFAULT_QUALITY_GATE_CONFIG.requireMinimumDuration,
+      requireVerificationEvidence:
+        companyConfig.requireVerificationEvidence ?? DEFAULT_QUALITY_GATE_CONFIG.requireVerificationEvidence,
       autoReopen: companyConfig.autoReopen ?? DEFAULT_QUALITY_GATE_CONFIG.autoReopen,
     };
   }
@@ -142,7 +144,7 @@ export function qualityGateService(db: Db) {
     return { pass: true, message: `Completion comment present (${count} comment${count > 1 ? "s" : ""} on issue).`, severity: "info" };
   }
 
-  async function checkVerificationEvidence(issue: IssueContext): Promise<QualityCheckResult> {
+  async function checkVerificationEvidence(issue: IssueContext, requireAsBlocker: boolean): Promise<QualityCheckResult> {
     // Fetch all comments for this issue (reverse chronological)
     const comments = await db
       .select({ body: issueComments.body })
@@ -173,6 +175,14 @@ export function qualityGateService(db: Db) {
         pass: true,
         message: `Verification evidence found (${hasStructuredFormat ? "structured format" : "keywords"}).`,
         severity: "info",
+      };
+    }
+
+    if (requireAsBlocker) {
+      return {
+        pass: false,
+        message: "No verification evidence found. Agent must include proof of work (curl results, test output, file checks, screenshots, etc.) before marking the task as done.",
+        severity: "blocker",
       };
     }
 
@@ -257,7 +267,7 @@ export function qualityGateService(db: Db) {
     if (config.requireComment) {
       checks.push(await checkCommentRequired(issue));
     }
-    checks.push(await checkVerificationEvidence(issue));
+    checks.push(await checkVerificationEvidence(issue, config.requireVerificationEvidence));
     checks.push(await checkDurationSanity(issue, config.requireMinimumDuration));
     checks.push(await checkNoStaleLock(issue));
 
@@ -324,6 +334,8 @@ export function qualityGateService(db: Db) {
     // Calculate v2 score — always real, even during warmup
     const score = calculateScore(newPoints, qualityStreak);
     const dbScore = Math.round(score);
+    const { state: qualityState, badge: qualityBadge, autoAssign: qualityAutoAssign } =
+      getQualityState(score, newPoints.length);
 
     await db
       .update(agents)
@@ -331,6 +343,9 @@ export function qualityGateService(db: Db) {
         totalCompleted,
         totalReopened,
         qualityScore: dbScore,
+        qualityState,
+        qualityBadge,
+        qualityAutoAssign,
         qualityPoints: newPoints,
         qualityStreak,
         qualityAttempts: newPoints.length,

@@ -33,3 +33,4 @@ export { reconcilePersistedRuntimeServicesOnStartup } from "./workspace-runtime.
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
 export { generateAgentProfile, AgentProfileGeneratorError } from "./agent-profile-generator.js";
 export { delegationRulesService } from "./delegation-rules.js";
+export { sprintService } from "./sprints.js";

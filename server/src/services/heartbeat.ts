@@ -733,7 +733,9 @@ export function heartbeatService(db: Db) {
   const issuesSvc = issueService(db);
   const executionWorkspacesSvc = executionWorkspaceService(db);
   const workspaceOperationsSvc = workspaceOperationService(db);
-  const staleDetection = staleDetectionService(db);
+  const staleDetection = staleDetectionService(db, {
+    wakeup: (...args) => enqueueWakeup(...args),
+  });
   const activeRunExecutions = new Set<string>();
   const budgetHooks = {
     cancelWorkForScope: cancelBudgetScopeWork,

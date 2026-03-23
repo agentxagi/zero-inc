@@ -32,6 +32,7 @@ import { reviewRoutes } from "./routes/reviews.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { delegationRuleRoutes } from "./routes/delegation-rules.js";
+import { sprintRoutes } from "./routes/sprints.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
@@ -147,6 +148,7 @@ export async function createApp(
   api.use(projectRoutes(db));
   api.use(issueRoutes(db, opts.storageService));
   api.use(delegationRuleRoutes(db));
+  api.use(sprintRoutes(db));
   api.use(reviewRoutes(db));
   api.use(routineRoutes(db));
   api.use(executionWorkspaceRoutes(db));

@@ -35,8 +35,11 @@ Follow these steps every time you wake up:
   - add a markdown comment explaining why it remains open and what happens next.
     Always include links to the approval and issue in that comment.
 
-**Step 3 — Get assignments.** Prefer `GET /api/agents/me/inbox-lite` for the normal heartbeat inbox. It returns the compact assignment list you need for prioritization. Fall back to `GET /api/companies/{companyId}/issues?assigneeAgentId={your-agent-id}&status=todo,in_progress,blocked` only when you need the full issue objects.
-**Code Reviewer / QA exception:** Your PRIMARY work is reviewing tasks in `in_review` status. This takes priority over everything else in your inbox. You MUST explicitly query: `GET /api/companies/{companyId}/issues?status=in_review&includeRoutineExecutions=true&limit=20`. Then filter the results to find tasks where `reviewerAgentId` matches your agent ID — these are YOUR reviews. Skip tasks where you are the `assigneeAgentId` (that's self-review and blocked). If ANY of your assigned reviews exist, you MUST process them using Step 7 below — even if you posted comments about them before. Comments alone do NOT resolve a review. You MUST submit a formal verdict via the review API. Only fall back to inbox-lite after ALL your `in_review` tasks have a verdict.
+**Step 3 — Check for review assignments, then get your inbox.**
+
+**Review check (ALL agents):** Before checking your normal inbox, you MUST check if you have any review assignments. Query: `GET /api/companies/{companyId}/issues?status=in_review&includeRoutineExecutions=true&limit=20`. Then filter the results to find tasks where `reviewerAgentId` matches your agent ID — these are YOUR reviews. Skip tasks where you are the `assigneeAgentId` (that's self-review and blocked). If ANY of your assigned reviews exist, you MUST process them using Step 7 below — even if you posted comments about them before. Comments alone do NOT resolve a review. You MUST submit a formal verdict via the review API. Only fall back to inbox-lite after ALL your `in_review` tasks have a verdict.
+
+Then get your normal inbox. Prefer `GET /api/agents/me/inbox-lite` for the compact assignment list. Fall back to `GET /api/companies/{companyId}/issues?assigneeAgentId={your-agent-id}&status=todo,in_progress,blocked` only when you need the full issue objects.
 
 **Step 4 — Pick work (with mention exception).** Work on `in_progress` first, then `todo`. Skip `blocked` unless you can unblock it.
 **Blocked-task dedup:** Before working on a `blocked` task, fetch its comment thread. If your most recent comment was a blocked-status update AND no new comments from other agents or users have been posted since, skip the task entirely — do not checkout, do not post another comment. Exit the heartbeat (or move to the next task) instead. Only re-engage with a blocked task when new context exists (a new comment, status change, or event-based wake like `PAPERCLIP_WAKE_COMMENT_ID`).
@@ -67,7 +70,7 @@ Use comments incrementally:
 
 Read enough ancestor/comment context to understand _why_ the task exists and what changed. Do not reflexively reload the whole thread on every heartbeat.
 
-**Step 7 — Review (QA/Code Reviewer role only).** When you are assigned a task in `in_review` status, you MUST verify the actual output before approving.
+**Step 7 — Review (when assigned as reviewer).** When you are assigned a task in `in_review` status (identified in Step 3), you MUST verify the actual output before approving.
 
 **CRITICAL: Do NOT checkout an `in_review` task.** Checkout changes status to `in_progress` and reassigns ownership. Instead, simply read the task, verify the output, and submit your verdict via the review API. The task stays in `in_review` until you submit your verdict.
 

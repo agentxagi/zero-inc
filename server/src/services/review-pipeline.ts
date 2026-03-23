@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql, desc } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
 import { agents, issueComments, issues } from "@zeroinc/db";
 import type { QualityGateResult } from "./quality-gate.js";
@@ -101,6 +101,8 @@ export function reviewPipelineService(db: Db, wakeupDeps?: ReviewPipelineWakeupD
     if (matched) {
       reviewerAgentId = matched.id;
     } else {
+      // Smart fallback: pick the most qualified available agent (by qualityScore)
+      // Exclude the assignee and terminated/error agents
       const [fallback] = await db
         .select({ id: agents.id })
         .from(agents)
@@ -112,6 +114,7 @@ export function reviewPipelineService(db: Db, wakeupDeps?: ReviewPipelineWakeupD
             ne(agents.id, issue.assigneeAgentId ?? ""),
           ),
         )
+        .orderBy(desc(agents.qualityScore))
         .limit(1);
       reviewerAgentId = fallback?.id ?? null;
     }
@@ -154,6 +157,27 @@ export function reviewPipelineService(db: Db, wakeupDeps?: ReviewPipelineWakeupD
   ): Promise<boolean> {
     if (!config.enabled || !config.requireReview) {
       // Review pipeline disabled — let the issue stay as done
+      return false;
+    }
+
+    // Recovery: if the issue already has an approved review verdict, skip re-review
+    // and ensure it's in done status (handles stuck tasks from prior non-atomic updates)
+    const [existing] = await db
+      .select({ reviewVerdict: issues.reviewVerdict })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (existing?.reviewVerdict === "approved") {
+      await db
+        .update(issues)
+        .set({
+          status: "done",
+          completedAt: new Date(),
+          reviewerAgentId: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(issues.id, issueId));
       return false;
     }
 
@@ -228,28 +252,34 @@ export function reviewPipelineService(db: Db, wakeupDeps?: ReviewPipelineWakeupD
       })
       .where(eq(agents.id, reviewerAgentId));
 
-    // Update review fields on issue
-    await db
-      .update(issues)
-      .set({
-        reviewCompletedAt: new Date(),
-        reviewVerdict: input.verdict,
-        updatedAt: new Date(),
-      })
-      .where(eq(issues.id, issueId));
+    // Atomically set review verdict AND status in a single transaction
+    // to prevent the task from getting stuck with an approved verdict but in_review status
+    await db.transaction(async (tx) => {
+      if (input.verdict === "approved") {
+        await tx
+          .update(issues)
+          .set({
+            status: "done",
+            completedAt: new Date(),
+            reviewCompletedAt: new Date(),
+            reviewVerdict: "approved",
+            reviewerAgentId: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(issues.id, issueId));
+      } else {
+        await tx
+          .update(issues)
+          .set({
+            reviewCompletedAt: new Date(),
+            reviewVerdict: input.verdict,
+            updatedAt: new Date(),
+          })
+          .where(eq(issues.id, issueId));
+      }
+    });
 
     if (input.verdict === "approved") {
-      // Mark as done
-      await db
-        .update(issues)
-        .set({
-          status: "done",
-          completedAt: new Date(),
-          reviewerAgentId: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(issues.id, issueId));
-
       return { success: true };
     }
 

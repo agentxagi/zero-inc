@@ -708,3 +708,6 @@ export const PLUGIN_BRIDGE_ERROR_CODES = [
   "UNKNOWN",
 ] as const;
 export type PluginBridgeErrorCode = (typeof PLUGIN_BRIDGE_ERROR_CODES)[number];
+
+export const SPRINT_STATUSES = ["planning", "active", "completed", "cancelled"] as const;
+export type SprintStatus = (typeof SPRINT_STATUSES)[number];

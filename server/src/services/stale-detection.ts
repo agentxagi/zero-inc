@@ -24,7 +24,17 @@ interface StaleAction {
   newStatus?: string;
 }
 
-export function staleDetectionService(db: Db) {
+export interface StaleDetectionWakeupDeps {
+  wakeup: (agentId: string, opts: {
+    source?: "timer" | "assignment" | "on_demand" | "automation";
+    triggerDetail?: "manual" | "ping" | "callback" | "system";
+    reason?: string | null;
+    payload?: Record<string, unknown> | null;
+    contextSnapshot?: Record<string, unknown>;
+  }) => Promise<unknown>;
+}
+
+export function staleDetectionService(db: Db, wakeupDeps?: StaleDetectionWakeupDeps) {
   const gov = governanceSettingsService(db);
 
   async function detect(): Promise<StaleAction[]> {
@@ -266,6 +276,24 @@ export function staleDetectionService(db: Db) {
           body: `[stale:stale-review-ping] ${action.reason}\n\n_Auto-detected by stale detection._`,
         });
         await db.update(issues).set({ updatedAt: new Date() }).where(eq(issues.id, action.issueId));
+
+        // Wake the reviewer agent so they actually process the review
+        if (wakeupDeps?.wakeup) {
+          const [issue] = await db
+            .select({ reviewerAgentId: issues.reviewerAgentId })
+            .from(issues)
+            .where(eq(issues.id, action.issueId))
+            .limit(1);
+          if (issue?.reviewerAgentId) {
+            void wakeupDeps.wakeup(issue.reviewerAgentId, {
+              source: "automation",
+              triggerDetail: "system",
+              reason: "stale_review_ping",
+              payload: { issueId: action.issueId },
+              contextSnapshot: { issueId: action.issueId, source: "stale_detection" },
+            }).catch(() => {});
+          }
+        }
         break;
       }
       case "flag_qa": {

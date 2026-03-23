@@ -301,3 +301,12 @@ export {
   type CreateDelegationRule,
   type UpdateDelegationRule,
 } from "./delegation-rule.js";
+
+export {
+  createSprintSchema,
+  updateSprintSchema,
+  linkIssueToSprintSchema,
+  type CreateSprint,
+  type UpdateSprint,
+  type LinkIssueToSprint,
+} from "./sprint.js";

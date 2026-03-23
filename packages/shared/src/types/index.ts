@@ -200,3 +200,4 @@ export type {
   PluginJobRunRecord,
   PluginWebhookDeliveryRecord,
 } from "./plugin.js";
+export type { Sprint, SprintStatus, BurndownPoint, VelocityEntry, SprintDashboard } from "./sprint.js";

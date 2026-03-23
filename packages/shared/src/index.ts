@@ -69,6 +69,7 @@ export {
   PLUGIN_WEBHOOK_DELIVERY_STATUSES,
   PLUGIN_EVENT_TYPES,
   PLUGIN_BRIDGE_ERROR_CODES,
+  SPRINT_STATUSES,
   type CompanyStatus,
   type DeploymentMode,
   type DeploymentExposure,
@@ -136,6 +137,7 @@ export {
   type PluginWebhookDeliveryStatus,
   type PluginEventType,
   type PluginBridgeErrorCode,
+  type SprintStatus,
 } from "./constants.js";
 
 export type {
@@ -322,6 +324,10 @@ export type {
   PluginWebhookDeliveryRecord,
   QuotaWindow,
   ProviderQuotaResult,
+  Sprint,
+  BurndownPoint,
+  VelocityEntry,
+  SprintDashboard,
 } from "./types/index.js";
 
 export {
@@ -558,6 +564,12 @@ export {
   updateDelegationRuleSchema,
   type CreateDelegationRule,
   type UpdateDelegationRule,
+  createSprintSchema,
+  updateSprintSchema,
+  linkIssueToSprintSchema,
+  type CreateSprint,
+  type UpdateSprint,
+  type LinkIssueToSprint,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";

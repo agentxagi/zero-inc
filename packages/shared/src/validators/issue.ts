@@ -146,6 +146,7 @@ export const qualityGateConfigSchema = z
     enabled: z.boolean().optional(),
     requireComment: z.boolean().optional(),
     requireMinimumDuration: z.number().int().positive().optional(),
+    requireVerificationEvidence: z.boolean().optional(),
     autoReopen: z.boolean().optional(),
   })
   .strict();
@@ -156,6 +157,7 @@ export const DEFAULT_QUALITY_GATE_CONFIG: Required<QualityGateConfig> = {
   enabled: true,
   requireComment: true,
   requireMinimumDuration: 5,
+  requireVerificationEvidence: false,
   autoReopen: true,
 };
 
