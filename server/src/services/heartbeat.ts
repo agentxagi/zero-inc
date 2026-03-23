@@ -4,7 +4,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { and, asc, desc, eq, gt, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
-import type { BillingType } from "@zeroinc/shared";
+import type { BillingType, ProviderQuotaResult } from "@zeroinc/shared";
 import {
   agents,
   agentRuntimeState,
@@ -54,6 +54,8 @@ import { staleDetectionService } from "./stale-detection.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import { dashboardService } from "./dashboard.js";
 import { redactCurrentUserText, redactCurrentUserValue } from "../log-redaction.js";
+import { fetchAllQuotaWindows } from "./quota-windows.js";
+import { evaluatePreventiveQuotaThrottle, type PreventiveQuotaThrottleDecision } from "./preventive-quota-throttle.js";
 import {
   hasSessionCompactionThresholds,
   resolveSessionCompactionPolicy,
@@ -77,6 +79,131 @@ const SESSIONED_LOCAL_ADAPTERS = new Set([
   "opencode_local",
   "pi_local",
 ]);
+const DEVELOPER_WORKSPACE_ROLES = new Set(["engineer", "devops", "qa", "cto"]);
+const AUTO_PAUSE_QUOTA_ERROR_CODES = new Set([
+  "watchdog_token_budget",
+  "watchdog_stale_queued",
+]);
+const PREVENTIVE_QUOTA_THROTTLE_CACHE_MS = 60_000;
+const PREVENTIVE_QUOTA_THROTTLE_FETCH_TIMEOUT_MS = 5_000;
+
+function toDiagnosticString(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try {
+    const serialized = JSON.stringify(value);
+    return typeof serialized === "string" ? serialized : String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function detectQuotaHardStop(input: {
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  errorMeta?: Record<string, unknown> | null;
+  resultJson?: Record<string, unknown> | null;
+}): string | null {
+  const normalizedCode = readNonEmptyString(input.errorCode)?.toLowerCase() ?? null;
+  if (normalizedCode && AUTO_PAUSE_QUOTA_ERROR_CODES.has(normalizedCode)) {
+    return normalizedCode;
+  }
+
+  const haystack = [
+    input.errorCode,
+    input.errorMessage,
+    toDiagnosticString(input.errorMeta),
+    toDiagnosticString(input.resultJson),
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join("\n")
+    .toLowerCase();
+
+  if (!haystack) return null;
+  if (haystack.includes("watchdog_token_budget")) return "watchdog_token_budget";
+  if (haystack.includes("watchdog_stale_queued")) return "watchdog_stale_queued";
+  if (haystack.includes("usage limit reached for 5 hour")) return "zai_5h_usage_limit";
+  if (haystack.includes("usage limit reached for 5-hour")) return "zai_5h_usage_limit";
+  if (haystack.includes("usage limit reached") && haystack.includes("1308")) return "zai_5h_usage_limit";
+  if (haystack.includes("5h limit") && haystack.includes("429")) return "zai_5h_usage_limit";
+
+  return null;
+}
+
+function shouldPreferIsolatedWorkspaceForAgent(agent: { role?: string | null }): boolean {
+  const role = (agent.role ?? "").trim().toLowerCase();
+  return DEVELOPER_WORKSPACE_ROLES.has(role);
+}
+
+function extractWorkspaceCwdFromRun(run: typeof heartbeatRuns.$inferSelect): string | null {
+  const context = parseObject(run.contextSnapshot);
+  const workspace = parseObject(context.zeroincWorkspace);
+  return readNonEmptyString(workspace?.cwd);
+}
+
+function extractWorkspaceStrategyFromRun(run: typeof heartbeatRuns.$inferSelect): string | null {
+  const context = parseObject(run.contextSnapshot);
+  const workspace = parseObject(context.zeroincWorkspace);
+  return readNonEmptyString(workspace?.strategy);
+}
+
+async function stashFailedRunWorkspace(
+  cwd: string,
+  runId: string,
+  outcome: string,
+): Promise<{ stashed: boolean; message: string }> {
+  try {
+    const isGitRepo = await fs
+      .stat(path.resolve(cwd, ".git"))
+      .then((entry) => entry.isDirectory())
+      .catch(() => false);
+    if (!isGitRepo) {
+      return { stashed: false, message: "not a git repository" };
+    }
+
+    const { stdout: statusOutput } = await execFile("git", ["status", "--porcelain"], {
+      cwd,
+      env: sanitizeRuntimeServiceBaseEnv(process.env),
+      timeout: 10_000,
+    });
+    if (!statusOutput.trim()) {
+      return { stashed: false, message: "no uncommitted changes" };
+    }
+
+    const stashMessage = `auto-stash: run ${runId} (${outcome})`;
+    await execFile(
+      "git",
+      ["stash", "push", "--include-untracked", "-m", stashMessage],
+      {
+        cwd,
+        env: sanitizeRuntimeServiceBaseEnv(process.env),
+        timeout: 30_000,
+      },
+    );
+
+    return { stashed: true, message: stashMessage };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.warn(
+      { cwd, runId, outcome, error: reason },
+      "failed to stash workspace changes after failed run",
+    );
+    return { stashed: false, message: `stash failed: ${reason}` };
+  }
+}
+
+async function isGitRepository(cwd: string): Promise<boolean> {
+  try {
+    const { stdout } = await execFile("git", ["rev-parse", "--is-inside-work-tree"], {
+      cwd,
+      env: sanitizeRuntimeServiceBaseEnv(process.env),
+      timeout: 10_000,
+    });
+    return stdout.trim() === "true";
+  } catch {
+    return false;
+  }
+}
 
 function deriveRepoNameFromRepoUrl(repoUrl: string | null): string | null {
   const trimmed = repoUrl?.trim() ?? "";
@@ -724,9 +851,154 @@ function resolveNextSessionState(input: {
 
 export function heartbeatService(db: Db) {
   const instanceSettings = instanceSettingsService(db);
+  const OPERATIONS_PAUSED_CACHE_MS = 2_000;
+  let operationsPausedCache: { value: boolean; expiresAt: number } | null = null;
+  let preventiveQuotaThrottleCache:
+    | { thresholdPercent: number; decision: PreventiveQuotaThrottleDecision; expiresAt: number }
+    | null = null;
+  let preventiveQuotaThrottleLastActive: boolean | null = null;
+  const setOperationsPausedCache = (value: boolean) => {
+    operationsPausedCache = { value, expiresAt: Date.now() + OPERATIONS_PAUSED_CACHE_MS };
+  };
   const getCurrentUserRedactionOptions = async () => ({
     enabled: (await instanceSettings.getGeneral()).censorUsernameInLogs,
   });
+  const areOperationsPaused = async () => {
+    const now = Date.now();
+    if (operationsPausedCache && operationsPausedCache.expiresAt > now) {
+      return operationsPausedCache.value;
+    }
+    const value = (await instanceSettings.getGeneral()).operationsPaused === true;
+    setOperationsPausedCache(value);
+    return value;
+  };
+  const fetchQuotaWindowsForPreventiveThrottle = async () => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    try {
+      const timeoutPromise = new Promise<ProviderQuotaResult[]>((resolve) => {
+        timeoutId = setTimeout(() => resolve([]), PREVENTIVE_QUOTA_THROTTLE_FETCH_TIMEOUT_MS);
+      });
+      const results = await Promise.race([fetchAllQuotaWindows(), timeoutPromise]);
+      return Array.isArray(results) ? results : [];
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
+  const getPreventiveQuotaThrottleDecision = async (
+    thresholdPercent: number,
+    now: Date,
+  ): Promise<PreventiveQuotaThrottleDecision> => {
+    const currentTs = Date.now();
+    if (
+      preventiveQuotaThrottleCache &&
+      preventiveQuotaThrottleCache.expiresAt > currentTs &&
+      preventiveQuotaThrottleCache.thresholdPercent === thresholdPercent
+    ) {
+      return preventiveQuotaThrottleCache.decision;
+    }
+
+    let results: ProviderQuotaResult[] = [];
+    try {
+      results = await fetchQuotaWindowsForPreventiveThrottle();
+    } catch (err) {
+      logger.warn({ err }, "preventive quota throttle polling failed");
+      if (
+        preventiveQuotaThrottleCache &&
+        preventiveQuotaThrottleCache.thresholdPercent === thresholdPercent
+      ) {
+        preventiveQuotaThrottleCache.expiresAt = currentTs + Math.floor(PREVENTIVE_QUOTA_THROTTLE_CACHE_MS / 2);
+        return preventiveQuotaThrottleCache.decision;
+      }
+    }
+
+    const decision = evaluatePreventiveQuotaThrottle(results, thresholdPercent, now);
+    preventiveQuotaThrottleCache = {
+      thresholdPercent,
+      decision,
+      expiresAt: currentTs + PREVENTIVE_QUOTA_THROTTLE_CACHE_MS,
+    };
+
+    if (decision.active !== preventiveQuotaThrottleLastActive) {
+      if (decision.active) {
+        logger.warn(
+          {
+            thresholdPercent: decision.thresholdPercent,
+            maxUsedPercent: decision.maxUsedPercent,
+            matches: decision.matches.slice(0, 5),
+          },
+          "preventive quota throttle enabled timer heartbeat skipping",
+        );
+      } else if (preventiveQuotaThrottleLastActive === true) {
+        logger.info(
+          {
+            thresholdPercent: decision.thresholdPercent,
+            maxUsedPercent: decision.maxUsedPercent,
+          },
+          "preventive quota throttle released timer heartbeat skipping",
+        );
+      }
+      preventiveQuotaThrottleLastActive = decision.active;
+    }
+
+    return decision;
+  };
+  const maybeAutoPauseOperationsForQuota = async (input: {
+    runId: string;
+    companyId: string;
+    agentId: string;
+    agentRole: string | null;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    errorMeta?: Record<string, unknown> | null;
+    resultJson?: Record<string, unknown> | null;
+  }): Promise<{ reason: string; pausedNow: boolean; cancelledQueuedRuns?: number; cancelledPendingWakeups?: number } | null> => {
+    const reason = detectQuotaHardStop({
+      errorCode: input.errorCode,
+      errorMessage: input.errorMessage,
+      errorMeta: input.errorMeta,
+      resultJson: input.resultJson,
+    });
+    if (!reason) return null;
+    if (await areOperationsPaused()) {
+      return { reason, pausedNow: false };
+    }
+    try {
+      await instanceSettings.updateGeneral({ operationsPaused: true });
+      setOperationsPausedCache(true);
+      const cancelReason = `Cancelled due to quota hard-stop (${reason})`;
+      const cancelledWork = await cancelQueuedWorkForOperationsPause(input.companyId, cancelReason);
+      logger.warn(
+        {
+          runId: input.runId,
+          companyId: input.companyId,
+          agentId: input.agentId,
+          agentRole: input.agentRole,
+          reason,
+          cancelledQueuedRuns: cancelledWork.cancelledQueuedRuns,
+          cancelledPendingWakeups: cancelledWork.cancelledPendingWakeups,
+        },
+        "auto-paused instance operations after quota hard-stop",
+      );
+      return {
+        reason,
+        pausedNow: true,
+        cancelledQueuedRuns: cancelledWork.cancelledQueuedRuns,
+        cancelledPendingWakeups: cancelledWork.cancelledPendingWakeups,
+      };
+    } catch (error) {
+      logger.error(
+        {
+          runId: input.runId,
+          companyId: input.companyId,
+          agentId: input.agentId,
+          reason,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "failed to auto-pause operations after quota hard-stop",
+      );
+      return { reason, pausedNow: false };
+    }
+  };
 
   const runLogStore = getRunLogStore();
   const secretsSvc = secretService(db);
@@ -1602,6 +1874,7 @@ export function heartbeatService(db: Db) {
 
   async function claimQueuedRun(run: typeof heartbeatRuns.$inferSelect) {
     if (run.status !== "queued") return run;
+    if (await areOperationsPaused()) return null;
     const agent = await getAgent(run.agentId);
     if (!agent) {
       await cancelRunInternal(run.id, "Cancelled because the agent no longer exists");
@@ -1743,6 +2016,23 @@ export function heartbeatService(db: Db) {
             level: "error",
             message: "Run exceeded maximum duration of 2 hours — killed by scheduler",
           });
+
+          // Preserve git worktree changes; only auto-stash shared workspace changes.
+          const durationCwd = extractWorkspaceCwdFromRun(durationRun);
+          const durationWorkspaceStrategy = extractWorkspaceStrategyFromRun(durationRun);
+          if (durationCwd) {
+            if (durationWorkspaceStrategy === "git_worktree") {
+              await appendRunEvent(durationRun, await nextRunEventSeq(durationRun.id), {
+                eventType: "lifecycle",
+                stream: "system",
+                level: "info",
+                message: "Preserved git worktree after max duration kill",
+              }).catch(() => undefined);
+            } else {
+              await stashFailedRunWorkspace(durationCwd, durationRun.id, "max_duration_exceeded").catch(() => undefined);
+            }
+          }
+
           await releaseIssueExecutionAndPromote(durationRun);
         }
         await finalizeAgentStatus(run.agentId, "failed");
@@ -1800,6 +2090,22 @@ export function heartbeatService(db: Db) {
       if (!finalizedRun) finalizedRun = await getRun(run.id);
       if (!finalizedRun) continue;
 
+      // Preserve git worktree changes; only auto-stash shared workspace changes.
+      const processLostCwd = extractWorkspaceCwdFromRun(finalizedRun);
+      const processLostWorkspaceStrategy = extractWorkspaceStrategyFromRun(finalizedRun);
+      if (processLostCwd) {
+        if (processLostWorkspaceStrategy === "git_worktree") {
+          await appendRunEvent(finalizedRun, await nextRunEventSeq(finalizedRun.id), {
+            eventType: "lifecycle",
+            stream: "system",
+            level: "info",
+            message: "Preserved git worktree after process loss",
+          }).catch(() => undefined);
+        } else {
+          await stashFailedRunWorkspace(processLostCwd, finalizedRun.id, "process_lost").catch(() => undefined);
+        }
+      }
+
       let retriedRun: typeof heartbeatRuns.$inferSelect | null = null;
       if (shouldRetry) {
         const agent = await getAgent(run.agentId);
@@ -1836,6 +2142,7 @@ export function heartbeatService(db: Db) {
   }
 
   async function resumeQueuedRuns() {
+    if (await areOperationsPaused()) return;
     const queuedRuns = await db
       .select({ agentId: heartbeatRuns.agentId })
       .from(heartbeatRuns)
@@ -1962,6 +2269,7 @@ export function heartbeatService(db: Db) {
 
   async function startNextQueuedRunForAgent(agentId: string) {
     return withAgentStartLock(agentId, async () => {
+      if (await areOperationsPaused()) return [];
       const agent = await getAgent(agentId);
       if (!agent) return [];
       if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") {
@@ -2100,6 +2408,7 @@ export function heartbeatService(db: Db) {
       projectPolicy: projectExecutionWorkspacePolicy,
       issueSettings: issueExecutionWorkspaceSettings,
       legacyUseProjectWorkspace: issueAssigneeOverrides?.useProjectWorkspace ?? null,
+      preferIsolatedWorkspace: isolatedWorkspacesEnabled && shouldPreferIsolatedWorkspaceForAgent(agent),
     });
     const resolvedWorkspace = await resolveWorkspaceForRun(
       agent,
@@ -2107,11 +2416,18 @@ export function heartbeatService(db: Db) {
       previousSessionParams,
       { useProjectWorkspace: executionWorkspaceMode !== "agent_default" },
     );
+    let executionWorkspaceModeForRun = executionWorkspaceMode;
+    if (executionWorkspaceMode === "isolated_workspace" && !(await isGitRepository(resolvedWorkspace.cwd))) {
+      executionWorkspaceModeForRun = "shared_workspace";
+      resolvedWorkspace.warnings.push(
+        `Workspace "${resolvedWorkspace.cwd}" is not a Git repository. Falling back to shared workspace mode for this run.`,
+      );
+    }
     const workspaceManagedConfig = buildExecutionWorkspaceAdapterConfig({
       agentConfig: config,
       projectPolicy: projectExecutionWorkspacePolicy,
       issueSettings: issueExecutionWorkspaceSettings,
-      mode: executionWorkspaceMode,
+      mode: executionWorkspaceModeForRun,
       legacyUseProjectWorkspace: issueAssigneeOverrides?.useProjectWorkspace ?? null,
     });
     const mergedConfig = issueAssigneeOverrides?.adapterConfig
@@ -2193,11 +2509,11 @@ export function heartbeatService(db: Db) {
               projectWorkspaceId: resolvedProjectWorkspaceId,
               sourceIssueId: issueRef?.id ?? null,
               mode:
-                executionWorkspaceMode === "isolated_workspace"
+                executionWorkspaceModeForRun === "isolated_workspace"
                   ? "isolated_workspace"
-                  : executionWorkspaceMode === "operator_branch"
+                  : executionWorkspaceModeForRun === "operator_branch"
                     ? "operator_branch"
-                    : executionWorkspaceMode === "agent_default"
+                    : executionWorkspaceModeForRun === "agent_default"
                       ? "adapter_managed"
                       : "shared_workspace",
               strategyType: executionWorkspace.strategy === "git_worktree" ? "git_worktree" : "project_primary",
@@ -2310,7 +2626,7 @@ export function heartbeatService(db: Db) {
     context.zeroincWorkspace = {
       cwd: executionWorkspace.cwd,
       source: executionWorkspace.source,
-      mode: executionWorkspaceMode,
+      mode: executionWorkspaceModeForRun,
       strategy: executionWorkspace.strategy,
       projectId: executionWorkspace.projectId,
       workspaceId: executionWorkspace.workspaceId,
@@ -2722,8 +3038,35 @@ export function heartbeatService(db: Db) {
         error: adapterResult.errorMessage ?? null,
       });
 
+      const autoPauseResult =
+        outcome === "succeeded"
+          ? null
+          : await maybeAutoPauseOperationsForQuota({
+              runId: run.id,
+              companyId: agent.companyId,
+              agentId: agent.id,
+              agentRole: agent.role ?? null,
+              errorCode: adapterResult.errorCode ?? null,
+              errorMessage: adapterResult.errorMessage ?? null,
+              errorMeta: adapterResult.errorMeta ?? null,
+              resultJson: adapterResult.resultJson ?? null,
+            });
+
       const finalizedRun = await getRun(run.id);
       if (finalizedRun) {
+        if (autoPauseResult?.pausedNow) {
+          const cancelledSummary =
+            autoPauseResult.cancelledQueuedRuns !== undefined || autoPauseResult.cancelledPendingWakeups !== undefined
+              ? `; cancelled queued runs=${autoPauseResult.cancelledQueuedRuns ?? 0}, pending wakeups=${autoPauseResult.cancelledPendingWakeups ?? 0}`
+              : "";
+          await appendRunEvent(finalizedRun, seq++, {
+            eventType: "lifecycle",
+            stream: "system",
+            level: "warn",
+            message: `Instance operations auto-paused after quota hard-stop (${autoPauseResult.reason})${cancelledSummary}`,
+          });
+        }
+
         await appendRunEvent(finalizedRun, seq++, {
           eventType: "lifecycle",
           stream: "system",
@@ -2734,6 +3077,29 @@ export function heartbeatService(db: Db) {
             exitCode: adapterResult.exitCode,
           },
         });
+
+        // Preserve git worktree changes; only auto-stash shared workspace changes.
+        if (outcome !== "succeeded") {
+          if (executionWorkspace.strategy === "git_worktree") {
+            await appendRunEvent(finalizedRun, seq++, {
+              eventType: "lifecycle",
+              stream: "system",
+              level: "info",
+              message: `Preserved git worktree after ${outcome}`,
+            });
+          } else {
+            const stashResult = await stashFailedRunWorkspace(executionWorkspace.cwd, run.id, outcome);
+            if (stashResult.stashed) {
+              await appendRunEvent(finalizedRun, seq++, {
+                eventType: "lifecycle",
+                stream: "system",
+                level: "info",
+                message: `Workspace changes auto-stashed: ${stashResult.message}`,
+              });
+            }
+          }
+        }
+
         await releaseIssueExecutionAndPromote(finalizedRun);
       }
 
@@ -2797,13 +3163,58 @@ export function heartbeatService(db: Db) {
         error: message,
       });
 
+      const autoPauseResult = await maybeAutoPauseOperationsForQuota({
+        runId: run.id,
+        companyId: agent.companyId,
+        agentId: agent.id,
+        agentRole: agent.role ?? null,
+        errorCode: "adapter_failed",
+        errorMessage: message,
+      });
+
       if (failedRun) {
+        if (autoPauseResult?.pausedNow) {
+          const cancelledSummary =
+            autoPauseResult.cancelledQueuedRuns !== undefined || autoPauseResult.cancelledPendingWakeups !== undefined
+              ? `; cancelled queued runs=${autoPauseResult.cancelledQueuedRuns ?? 0}, pending wakeups=${autoPauseResult.cancelledPendingWakeups ?? 0}`
+              : "";
+          await appendRunEvent(failedRun, seq++, {
+            eventType: "lifecycle",
+            stream: "system",
+            level: "warn",
+            message: `Instance operations auto-paused after quota hard-stop (${autoPauseResult.reason})${cancelledSummary}`,
+          });
+        }
+
         await appendRunEvent(failedRun, seq++, {
           eventType: "error",
           stream: "system",
           level: "error",
           message,
         });
+
+        // Preserve git worktree changes; only auto-stash shared workspace changes.
+        if (executionWorkspace?.cwd) {
+          if (executionWorkspace.strategy === "git_worktree") {
+            await appendRunEvent(failedRun, seq++, {
+              eventType: "lifecycle",
+              stream: "system",
+              level: "info",
+              message: "Preserved git worktree after adapter failure",
+            });
+          } else {
+            const stashResult = await stashFailedRunWorkspace(executionWorkspace.cwd, run.id, "adapter_failed");
+            if (stashResult.stashed) {
+              await appendRunEvent(failedRun, seq++, {
+                eventType: "lifecycle",
+                stream: "system",
+                level: "info",
+                message: `Workspace changes auto-stashed: ${stashResult.message}`,
+              });
+            }
+          }
+        }
+
         await releaseIssueExecutionAndPromote(failedRun);
 
         await updateRuntimeState(agent, failedRun, {
@@ -2832,39 +3243,75 @@ export function heartbeatService(db: Db) {
       await finalizeAgentStatus(agent.id, "failed");
     }
     } catch (outerErr) {
-          // Setup code before adapter.execute threw (e.g. ensureRuntimeState, resolveWorkspaceForRun).
-          // The inner catch did not fire, so we must record the failure here.
-          const message = outerErr instanceof Error ? outerErr.message : "Unknown setup failure";
-          logger.error({ err: outerErr, runId }, "heartbeat execution setup failed");
-          await setRunStatus(runId, "failed", {
-            error: message,
-            errorCode: "adapter_failed",
-            finishedAt: new Date(),
+      // Setup code before adapter.execute threw (e.g. ensureRuntimeState, resolveWorkspaceForRun).
+      // The inner catch did not fire, so we must record the failure here.
+      const message = outerErr instanceof Error ? outerErr.message : "Unknown setup failure";
+      logger.error({ err: outerErr, runId }, "heartbeat execution setup failed");
+      await setRunStatus(runId, "failed", {
+        error: message,
+        errorCode: "adapter_failed",
+        finishedAt: new Date(),
+      }).catch(() => undefined);
+      await setWakeupStatus(run.wakeupRequestId, "failed", {
+        finishedAt: new Date(),
+        error: message,
+      }).catch(() => undefined);
+      const autoPauseResult = await maybeAutoPauseOperationsForQuota({
+        runId: run.id,
+        companyId: run.companyId,
+        agentId: run.agentId,
+        agentRole: null,
+        errorCode: "adapter_failed",
+        errorMessage: message,
+      }).catch(() => null);
+      const failedRun = await getRun(runId).catch(() => null);
+      if (failedRun) {
+        let setupFailureSeq = 1;
+        if (autoPauseResult?.pausedNow) {
+          const cancelledSummary =
+            autoPauseResult.cancelledQueuedRuns !== undefined || autoPauseResult.cancelledPendingWakeups !== undefined
+              ? `; cancelled queued runs=${autoPauseResult.cancelledQueuedRuns ?? 0}, pending wakeups=${autoPauseResult.cancelledPendingWakeups ?? 0}`
+              : "";
+          await appendRunEvent(failedRun, setupFailureSeq++, {
+            eventType: "lifecycle",
+            stream: "system",
+            level: "warn",
+            message: `Instance operations auto-paused after quota hard-stop (${autoPauseResult.reason})${cancelledSummary}`,
           }).catch(() => undefined);
-          await setWakeupStatus(run.wakeupRequestId, "failed", {
-            finishedAt: new Date(),
-            error: message,
-          }).catch(() => undefined);
-          const failedRun = await getRun(runId).catch(() => null);
-          if (failedRun) {
-            // Emit a run-log event so the failure is visible in the run timeline,
-            // consistent with what the inner catch block does for adapter failures.
-            await appendRunEvent(failedRun, 1, {
-              eventType: "error",
-              stream: "system",
-              level: "error",
-              message,
-            }).catch(() => undefined);
-            await releaseIssueExecutionAndPromote(failedRun).catch(() => undefined);
-          }
-          // Ensure the agent is not left stuck in "running" if the inner catch handler's
-          // DB calls threw (e.g. a transient DB error in finalizeAgentStatus).
-          await finalizeAgentStatus(run.agentId, "failed").catch(() => undefined);
-        } finally {
-          await releaseRuntimeServicesForRun(run.id).catch(() => undefined);
-          activeRunExecutions.delete(run.id);
-          await startNextQueuedRunForAgent(run.agentId);
         }
+        // Emit a run-log event so the failure is visible in the run timeline,
+        // consistent with what the inner catch block does for adapter failures.
+        await appendRunEvent(failedRun, setupFailureSeq++, {
+          eventType: "error",
+          stream: "system",
+          level: "error",
+          message,
+        }).catch(() => undefined);
+        // Preserve git worktree changes; only auto-stash shared workspace changes.
+        const setupCwd = extractWorkspaceCwdFromRun(failedRun);
+        const setupWorkspaceStrategy = extractWorkspaceStrategyFromRun(failedRun);
+        if (setupCwd) {
+          if (setupWorkspaceStrategy === "git_worktree") {
+            await appendRunEvent(failedRun, setupFailureSeq++, {
+              eventType: "lifecycle",
+              stream: "system",
+              level: "info",
+              message: "Preserved git worktree after setup failure",
+            }).catch(() => undefined);
+          } else {
+            await stashFailedRunWorkspace(setupCwd, run.id, "setup_failed").catch(() => undefined);
+          }
+        }
+        await releaseIssueExecutionAndPromote(failedRun).catch(() => undefined);
+      }
+      // Ensure the agent is not left stuck in "running" if the inner catch handler's
+      // DB calls threw (e.g. a transient DB error in finalizeAgentStatus).
+      await finalizeAgentStatus(run.agentId, "failed").catch(() => undefined);
+    } finally {
+      await releaseRuntimeServicesForRun(run.id).catch(() => undefined);
+      activeRunExecutions.delete(run.id);
+      await startNextQueuedRunForAgent(run.agentId);
+    }
   }
 
   async function releaseIssueExecutionAndPromote(run: typeof heartbeatRuns.$inferSelect) {
@@ -3085,6 +3532,11 @@ export function heartbeatService(db: Db) {
         finishedAt: new Date(),
       });
     };
+
+    if (await areOperationsPaused()) {
+      await writeSkippedRequest("instance.operations_paused");
+      return null;
+    }
 
     let projectId = readNonEmptyString(enrichedContextSnapshot.projectId);
     if (!projectId && issueId) {
@@ -3582,6 +4034,48 @@ export function heartbeatService(db: Db) {
     return rows.map((row) => row.id);
   }
 
+  async function cancelQueuedWorkForOperationsPause(companyId: string, reason: string) {
+    const queuedRunIds = await db
+      .select({ id: heartbeatRuns.id })
+      .from(heartbeatRuns)
+      .where(and(eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.status, "queued")))
+      .then((rows) => rows.map((row) => row.id));
+
+    for (const runId of queuedRunIds) {
+      await cancelRunInternal(runId, reason);
+    }
+
+    const pendingWakeupIds = await db
+      .select({ id: agentWakeupRequests.id })
+      .from(agentWakeupRequests)
+      .where(
+        and(
+          eq(agentWakeupRequests.companyId, companyId),
+          inArray(agentWakeupRequests.status, ["queued", "deferred_issue_execution"]),
+          sql`${agentWakeupRequests.runId} is null`,
+        ),
+      )
+      .then((rows) => rows.map((row) => row.id));
+
+    if (pendingWakeupIds.length > 0) {
+      const now = new Date();
+      await db
+        .update(agentWakeupRequests)
+        .set({
+          status: "cancelled",
+          finishedAt: now,
+          error: reason,
+          updatedAt: now,
+        })
+        .where(inArray(agentWakeupRequests.id, pendingWakeupIds));
+    }
+
+    return {
+      cancelledQueuedRuns: queuedRunIds.length,
+      cancelledPendingWakeups: pendingWakeupIds.length,
+    };
+  }
+
   async function cancelPendingWakeupsForBudgetScope(scope: BudgetEnforcementScope) {
     const now = new Date();
     let wakeupIds: string[] = [];
@@ -3664,6 +4158,31 @@ export function heartbeatService(db: Db) {
         level: "warn",
         message: "run cancelled",
       });
+
+      // Preserve git worktree changes; only auto-stash shared workspace changes.
+      const cancelCwd = extractWorkspaceCwdFromRun(cancelled);
+      const cancelWorkspaceStrategy = extractWorkspaceStrategyFromRun(cancelled);
+      if (cancelCwd) {
+        if (cancelWorkspaceStrategy === "git_worktree") {
+          await appendRunEvent(cancelled, 2, {
+            eventType: "lifecycle",
+            stream: "system",
+            level: "info",
+            message: "Preserved git worktree after cancellation",
+          });
+        } else {
+          const stashResult = await stashFailedRunWorkspace(cancelCwd, cancelled.id, "cancelled");
+          if (stashResult.stashed) {
+            await appendRunEvent(cancelled, 2, {
+              eventType: "lifecycle",
+              stream: "system",
+              level: "info",
+              message: `Workspace changes auto-stashed: ${stashResult.message}`,
+            });
+          }
+        }
+      }
+
       await releaseIssueExecutionAndPromote(cancelled);
     }
 
@@ -3872,10 +4391,18 @@ export function heartbeatService(db: Db) {
     resumeQueuedRuns,
 
     tickTimers: async (now = new Date()) => {
+      if (await areOperationsPaused()) {
+        return { checked: 0, enqueued: 0, skipped: 0, skippedByPreventiveQuota: 0 };
+      }
+      const experimentalSettings = await instanceSettings.getExperimental();
+      const preventiveQuotaThrottleEnabled = experimentalSettings.preventiveQuotaThrottleEnabled === true;
+      const preventiveQuotaThrottleThresholdPercent = experimentalSettings.preventiveQuotaThrottleThresholdPercent;
+      let preventiveQuotaThrottleDecision: PreventiveQuotaThrottleDecision | null = null;
       const allAgents = await db.select().from(agents);
       let checked = 0;
       let enqueued = 0;
       let skipped = 0;
+      let skippedByPreventiveQuota = 0;
 
       for (const agent of allAgents) {
         if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") continue;
@@ -3886,6 +4413,18 @@ export function heartbeatService(db: Db) {
         const baseline = new Date(agent.lastHeartbeatAt ?? agent.createdAt).getTime();
         const elapsedMs = now.getTime() - baseline;
         if (elapsedMs < policy.intervalSec * 1000) continue;
+
+        if (preventiveQuotaThrottleEnabled) {
+          preventiveQuotaThrottleDecision ??= await getPreventiveQuotaThrottleDecision(
+            preventiveQuotaThrottleThresholdPercent,
+            now,
+          );
+          if (preventiveQuotaThrottleDecision.active) {
+            skipped += 1;
+            skippedByPreventiveQuota += 1;
+            continue;
+          }
+        }
 
         // Skip timer-based wake if agent has no open assignments.
         // Wake-on-demand (mentions, assignments, approvals) is unaffected.
@@ -3927,7 +4466,7 @@ export function heartbeatService(db: Db) {
         else skipped += 1;
       }
 
-      return { checked, enqueued, skipped };
+      return { checked, enqueued, skipped, skippedByPreventiveQuota };
     },
 
     cancelRun: (runId: string) => cancelRunInternal(runId),

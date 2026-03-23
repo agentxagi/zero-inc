@@ -35,15 +35,19 @@ describe("instance settings routes", () => {
     vi.clearAllMocks();
     mockInstanceSettingsService.getGeneral.mockResolvedValue({
       censorUsernameInLogs: false,
+      operationsPaused: false,
     });
     mockInstanceSettingsService.getExperimental.mockResolvedValue({
       enableIsolatedWorkspaces: false,
       autoRestartDevServerWhenIdle: false,
+      preventiveQuotaThrottleEnabled: false,
+      preventiveQuotaThrottleThresholdPercent: 85,
     });
     mockInstanceSettingsService.updateGeneral.mockResolvedValue({
       id: "instance-settings-1",
       general: {
         censorUsernameInLogs: true,
+        operationsPaused: false,
       },
     });
     mockInstanceSettingsService.updateExperimental.mockResolvedValue({
@@ -51,6 +55,8 @@ describe("instance settings routes", () => {
       experimental: {
         enableIsolatedWorkspaces: true,
         autoRestartDevServerWhenIdle: false,
+        preventiveQuotaThrottleEnabled: false,
+        preventiveQuotaThrottleThresholdPercent: 85,
       },
     });
     mockInstanceSettingsService.listCompanyIds.mockResolvedValue(["company-1", "company-2"]);
@@ -69,6 +75,8 @@ describe("instance settings routes", () => {
     expect(getRes.body).toEqual({
       enableIsolatedWorkspaces: false,
       autoRestartDevServerWhenIdle: false,
+      preventiveQuotaThrottleEnabled: false,
+      preventiveQuotaThrottleThresholdPercent: 85,
     });
 
     const patchRes = await request(app)
@@ -100,6 +108,28 @@ describe("instance settings routes", () => {
     });
   });
 
+  it("allows local board users to update preventive quota throttle settings", async () => {
+    const app = createApp({
+      type: "board",
+      userId: "local-board",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+    });
+
+    await request(app)
+      .patch("/api/instance/settings/experimental")
+      .send({
+        preventiveQuotaThrottleEnabled: true,
+        preventiveQuotaThrottleThresholdPercent: 88,
+      })
+      .expect(200);
+
+    expect(mockInstanceSettingsService.updateExperimental).toHaveBeenCalledWith({
+      preventiveQuotaThrottleEnabled: true,
+      preventiveQuotaThrottleThresholdPercent: 88,
+    });
+  });
+
   it("allows local board users to read and update general settings", async () => {
     const app = createApp({
       type: "board",
@@ -110,7 +140,7 @@ describe("instance settings routes", () => {
 
     const getRes = await request(app).get("/api/instance/settings/general");
     expect(getRes.status).toBe(200);
-    expect(getRes.body).toEqual({ censorUsernameInLogs: false });
+    expect(getRes.body).toEqual({ censorUsernameInLogs: false, operationsPaused: false });
 
     const patchRes = await request(app)
       .patch("/api/instance/settings/general")

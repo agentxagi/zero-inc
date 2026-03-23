@@ -18,11 +18,13 @@ function normalizeGeneralSettings(raw: unknown): InstanceGeneralSettings {
   if (parsed.success) {
     return {
       censorUsernameInLogs: parsed.data.censorUsernameInLogs ?? false,
+      operationsPaused: parsed.data.operationsPaused ?? false,
       responseLanguage: parsed.data.responseLanguage ?? undefined,
     };
   }
   return {
     censorUsernameInLogs: false,
+    operationsPaused: false,
     responseLanguage: undefined,
   };
 }
@@ -33,11 +35,15 @@ function normalizeExperimentalSettings(raw: unknown): InstanceExperimentalSettin
     return {
       enableIsolatedWorkspaces: parsed.data.enableIsolatedWorkspaces ?? false,
       autoRestartDevServerWhenIdle: parsed.data.autoRestartDevServerWhenIdle ?? false,
+      preventiveQuotaThrottleEnabled: parsed.data.preventiveQuotaThrottleEnabled ?? false,
+      preventiveQuotaThrottleThresholdPercent: parsed.data.preventiveQuotaThrottleThresholdPercent ?? 85,
     };
   }
   return {
     enableIsolatedWorkspaces: false,
     autoRestartDevServerWhenIdle: false,
+    preventiveQuotaThrottleEnabled: false,
+    preventiveQuotaThrottleThresholdPercent: 85,
   };
 }
 
