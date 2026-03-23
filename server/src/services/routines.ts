@@ -654,7 +654,8 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
         return updated ?? createdRun;
       } catch (error) {
         if (createdIssue) {
-          await txDb.delete(issues).where(eq(issues.id, createdIssue.id));
+          // Cancel instead of DELETE to avoid FK constraint violations from comments/cost_events
+          await txDb.update(issues).set({ status: "cancelled", updatedAt: new Date() }).where(eq(issues.id, createdIssue.id));
         }
         const failureReason = error instanceof Error ? error.message : String(error);
         const failed = await finalizeRun(createdRun.id, {

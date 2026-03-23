@@ -181,22 +181,35 @@ export function reviewPipelineService(db: Db, wakeupDeps?: ReviewPipelineWakeupD
       return false;
     }
 
-    // Set status to in_review instead of done
-    await db
-      .update(issues)
-      .set({
-        status: "in_review",
-        reviewCount: sql`${issues.reviewCount} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(issues.id, issueId));
-
-    // Auto-assign reviewer
+    // Auto-assign reviewer first — if no reviewer is available, fall back to done
+    let reviewerId: string | null = null;
     if (config.autoAssignReviewer) {
-      await assignReviewer(issueId, config);
+      reviewerId = await assignReviewer(issueId, config);
     }
 
-    return true;
+    if (reviewerId) {
+      // Reviewer assigned — set status to in_review
+      await db
+        .update(issues)
+        .set({
+          status: "in_review",
+          reviewCount: sql`${issues.reviewCount} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(issues.id, issueId));
+      return true;
+    }
+
+    // No reviewer available — leave as done, post a warning comment
+    await db
+      .insert(issueComments)
+      .values({
+        companyId: (await db.select({ companyId: issues.companyId }).from(issues).where(eq(issues.id, issueId)).limit(1))[0]?.companyId ?? "",
+        issueId,
+        body: "## Review Skipped\n\nNo available reviewer found. Task approved without review.",
+      });
+
+    return false;
   }
 
   // --- Submit review verdict ---

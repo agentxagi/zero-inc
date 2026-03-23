@@ -6,6 +6,16 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { cn } from "../lib/utils";
 
+const LANGUAGE_OPTIONS = [
+  { value: "", label: "Default (English)" },
+  { value: "pt-BR", label: "Portugus (BR)" },
+  { value: "es", label: "Espaol" },
+  { value: "fr", label: "Franais" },
+  { value: "de", label: "Deutsch" },
+  { value: "ja", label: "Japanese" },
+  { value: "zh", label: "Chinese" },
+] as const;
+
 export function InstanceGeneralSettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
@@ -32,6 +42,18 @@ export function InstanceGeneralSettings() {
     },
     onError: (error) => {
       setActionError(error instanceof Error ? error.message : "Failed to update general settings.");
+    },
+  });
+
+  const languageMutation = useMutation({
+    mutationFn: async (lang: string) =>
+      instanceSettingsApi.updateGeneral({ responseLanguage: lang || undefined }),
+    onSuccess: async () => {
+      setActionError(null);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.instance.generalSettings });
+    },
+    onError: (error) => {
+      setActionError(error instanceof Error ? error.message : "Failed to update language setting.");
     },
   });
 
@@ -96,6 +118,30 @@ export function InstanceGeneralSettings() {
               )}
             />
           </button>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <div className="space-y-1.5">
+          <h2 className="text-sm font-semibold">Response Language</h2>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Preferred language for all agent output — task descriptions, comments, and status updates.
+            Agents will use this language for all communication. Takes effect on the next heartbeat.
+          </p>
+        </div>
+        <div className="mt-3">
+          <select
+            value={generalQuery.data?.responseLanguage ?? ""}
+            onChange={(e) => languageMutation.mutate(e.target.value)}
+            disabled={languageMutation.isPending}
+            className="h-9 rounded-md border border-border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {LANGUAGE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
       </section>
     </div>

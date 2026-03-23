@@ -41,7 +41,8 @@ export function memoryRoutes(db: Db) {
       assertCompanyAccess(req, companyId);
 
       const actor = getActorInfo(req);
-      const result = await svc.writeAgentMemory(companyId, agentId, key, String(value), {
+      const serialized = typeof value === "string" ? value : JSON.stringify(value);
+      const result = await svc.writeAgentMemory(companyId, agentId, key, serialized, {
         sourceKind,
         sourceIssueId,
         sourceRunId,
@@ -144,6 +145,38 @@ export function memoryRoutes(db: Db) {
 
   // --- Shared Memory ---
 
+  // PUT /api/companies/:companyId/shared-memory — set a shared memory key (alias for POST)
+  router.put("/companies/:companyId/shared-memory", async (req, res) => {
+    try {
+      const companyId = req.params.companyId as string;
+      const { key, value, sourceKind, sourceIssueId } = req.body;
+
+      assertCompanyAccess(req, companyId);
+
+      if (!key || typeof key !== "string") {
+        res.status(400).json({ error: 'Missing or invalid "key"' });
+        return;
+      }
+      if (value === undefined || value === null) {
+        res.status(400).json({ error: 'Missing "value"' });
+        return;
+      }
+
+      const actor = getActorInfo(req);
+      const serialized = typeof value === "string" ? value : JSON.stringify(value);
+      const result = await svc.writeSharedMemory(companyId, key, serialized, {
+        writtenByAgentId: actor.agentId ?? undefined,
+        sourceKind,
+        sourceIssueId,
+      });
+      res.json(result);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      const status = msg.includes("exceeds") ? 413 : msg.includes("maximum") ? 409 : 500;
+      res.status(status).json({ error: msg });
+    }
+  });
+
   // POST /api/companies/:companyId/shared-memory — set a shared memory key
   router.post("/companies/:companyId/shared-memory", async (req, res) => {
     try {
@@ -162,7 +195,8 @@ export function memoryRoutes(db: Db) {
       }
 
       const actor = getActorInfo(req);
-      const result = await svc.writeSharedMemory(companyId, key, String(value), {
+      const serialized = typeof value === "string" ? value : JSON.stringify(value);
+      const result = await svc.writeSharedMemory(companyId, key, serialized, {
         writtenByAgentId: actor.agentId ?? undefined,
         sourceKind,
         sourceIssueId,

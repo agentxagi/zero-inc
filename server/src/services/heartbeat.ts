@@ -2031,6 +2031,17 @@ export function heartbeatService(db: Db) {
 
     const runtime = await ensureRuntimeState(agent);
     const context = parseObject(run.contextSnapshot);
+
+    // Inject instance-level language preference into agent context
+    if (!context.preferredResponseLanguage) {
+      try {
+        const general = await instanceSettings.getGeneral();
+        if (general.responseLanguage) {
+          context.preferredResponseLanguage = general.responseLanguage;
+        }
+      } catch { /* non-critical — skip if settings unavailable */ }
+    }
+
     const taskKey = deriveTaskKey(context, null);
     const sessionCodec = getAdapterSessionCodec(agent.adapterType);
     const issueId = readNonEmptyString(context.issueId);

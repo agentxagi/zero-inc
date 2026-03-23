@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: zeroinc
+      POSTGRES_PASSWORD: zeroinc
+      POSTGRES_DB: zeroinc_staging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zeroinc -d zeroinc_staging"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - pgdata-staging:/var/lib/postgresql/data
+
+  server:
+    image: ${STAGING_IMAGE:-ghcr.io/agentxagi/zero-inc:staging-latest}
+    ports:
+      - "3100:3100"
+    env_file:
+      - .env
+    volumes:
+      - zeroinc-staging-data:/zeroinc
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata-staging:
+  zeroinc-staging-data:

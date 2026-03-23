@@ -1,38 +1,66 @@
+# ZeroInc — Production Docker Compose
+# Usage: cp .env.example .env && edit .env && docker compose up -d
+# Docs:  doc/DEPLOY.md
+
 services:
   db:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: zeroinc
-      POSTGRES_PASSWORD: zeroinc
-      POSTGRES_DB: zeroinc
+      POSTGRES_USER: ${POSTGRES_USER:-zeroinc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-zeroinc}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U zeroinc -d zeroinc"]
-      interval: 2s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zeroinc} -d ${POSTGRES_DB:-zeroinc}"]
+      interval: 5s
       timeout: 5s
-      retries: 30
+      retries: 10
+      start_period: 10s
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - zeroinc
 
   server:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
-      - "3100:3100"
+      - "${PAPERCLIP_PORT:-3100}:3100"
     environment:
-      DATABASE_URL: postgres://zeroinc:zeroinc@db:5432/zeroinc
+      NODE_ENV: production
+      HOST: "0.0.0.0"
       PORT: "3100"
       SERVE_UI: "true"
-      PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
-      PAPERCLIP_DEPLOYMENT_EXPOSURE: "private"
+      DATABASE_URL: postgres://${POSTGRES_USER:-zeroinc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-zeroinc}
+      PAPERCLIP_HOME: "/zeroinc"
       PAPERCLIP_PUBLIC_URL: "${PAPERCLIP_PUBLIC_URL:-http://localhost:3100}"
-      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
+      PAPERCLIP_DEPLOYMENT_MODE: "${PAPERCLIP_DEPLOYMENT_MODE:-authenticated}"
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: "${PAPERCLIP_DEPLOYMENT_EXPOSURE:-private}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set in .env}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
     volumes:
       - zeroinc-data:/zeroinc
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3100/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - zeroinc
 
 volumes:
   pgdata:
   zeroinc-data:
+
+networks:
+  zeroinc:
+    driver: bridge

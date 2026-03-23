@@ -1,5 +1,6 @@
 export interface InstanceGeneralSettings {
   censorUsernameInLogs: boolean;
+  responseLanguage?: string;
 }
 
 export interface InstanceExperimentalSettings {
