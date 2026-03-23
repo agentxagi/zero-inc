@@ -21,6 +21,7 @@
     "@zeroinc/adapter-opencode-local": "workspace:*",
     "@zeroinc/adapter-pi-local": "workspace:*",
     "@zeroinc/adapter-openclaw-gateway": "workspace:*",
+    "@zeroinc/adapter-zeroclaw": "workspace:*",
     "@zeroinc/adapter-utils": "workspace:*",
     "@zeroinc/shared": "workspace:*",
     "@radix-ui/react-slot": "^1.2.4",

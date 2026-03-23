@@ -75,6 +75,14 @@ import {
   agentConfigurationDoc as hermesAgentConfigurationDoc,
   models as hermesModels,
 } from "hermes-paperclip-adapter";
+import {
+  execute as zeroclawExecute,
+  testEnvironment as zeroclawTestEnvironment,
+} from "@zeroinc/adapter-zeroclaw/server";
+import {
+  agentConfigurationDoc as zeroclawAgentConfigurationDoc,
+  models as zeroclawModels,
+} from "@zeroinc/adapter-zeroclaw";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 
@@ -181,6 +189,15 @@ const hermesLocalAdapter: ServerAdapterModule = {
   agentConfigurationDoc: hermesAgentConfigurationDoc,
 };
 
+const zeroclawAdapter: ServerAdapterModule = {
+  type: "zeroclaw",
+  execute: zeroclawExecute,
+  testEnvironment: zeroclawTestEnvironment,
+  models: zeroclawModels,
+  supportsLocalAgentJwt: false,
+  agentConfigurationDoc: zeroclawAgentConfigurationDoc,
+};
+
 const adaptersByType = new Map<string, ServerAdapterModule>(
   [
     claudeLocalAdapter,
@@ -191,6 +208,7 @@ const adaptersByType = new Map<string, ServerAdapterModule>(
     geminiLocalAdapter,
     openclawGatewayAdapter,
     hermesLocalAdapter,
+    zeroclawAdapter,
     processAdapter,
     httpAdapter,
   ].map((a) => [a.type, a]),

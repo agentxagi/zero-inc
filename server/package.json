@@ -50,6 +50,7 @@
     "@zeroinc/adapter-gemini-local": "workspace:*",
     "@zeroinc/adapter-openclaw-gateway": "workspace:*",
     "@zeroinc/adapter-opencode-local": "workspace:*",
+    "@zeroinc/adapter-zeroclaw": "workspace:*",
     "@zeroinc/adapter-pi-local": "workspace:*",
     "@zeroinc/adapter-utils": "workspace:*",
     "@zeroinc/db": "workspace:*",

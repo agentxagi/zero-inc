@@ -6,6 +6,7 @@ import { printGeminiStreamEvent } from "@zeroinc/adapter-gemini-local/cli";
 import { printOpenCodeStreamEvent } from "@zeroinc/adapter-opencode-local/cli";
 import { printPiStreamEvent } from "@zeroinc/adapter-pi-local/cli";
 import { printOpenClawGatewayStreamEvent } from "@zeroinc/adapter-openclaw-gateway/cli";
+import { printZeroClawStreamEvent } from "@zeroinc/adapter-zeroclaw/cli";
 import { processCLIAdapter } from "./process/index.js";
 import { httpCLIAdapter } from "./http/index.js";
 
@@ -44,6 +45,11 @@ const openclawGatewayCLIAdapter: CLIAdapterModule = {
   formatStdoutEvent: printOpenClawGatewayStreamEvent,
 };
 
+const zeroclawCLIAdapter: CLIAdapterModule = {
+  type: "zeroclaw",
+  formatStdoutEvent: printZeroClawStreamEvent,
+};
+
 const adaptersByType = new Map<string, CLIAdapterModule>(
   [
     claudeLocalCLIAdapter,
@@ -53,6 +59,7 @@ const adaptersByType = new Map<string, CLIAdapterModule>(
     cursorLocalCLIAdapter,
     geminiLocalCLIAdapter,
     openclawGatewayCLIAdapter,
+    zeroclawCLIAdapter,
     processCLIAdapter,
     httpCLIAdapter,
   ].map((a) => [a.type, a]),
