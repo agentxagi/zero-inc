@@ -2379,8 +2379,13 @@ export function agentRoutes(db: Db) {
     assertCompanyAccess(req, agent.companyId);
 
     // Authorization: only board users, CTO role, or PM role agents can modify settings
-    const actorRole = agent?.role;
     if (req.actor.type === "agent") {
+      const actorAgent = req.actor.agentId ? await svc.getById(req.actor.agentId) : null;
+      if (!actorAgent || actorAgent.companyId !== agent.companyId) {
+        res.status(403).json({ error: "Agent key cannot access another company" });
+        return;
+      }
+      const actorRole = actorAgent.role;
       if (actorRole !== "cto" && actorRole !== "pm") {
         res.status(403).json({ error: "Only CTO or PM agents can modify governance settings" });
         return;
@@ -2426,17 +2431,11 @@ export function agentRoutes(db: Db) {
   // GET /api/governance-settings — get global governance settings
   router.get("/governance-settings", async (req, _res, next) => {
     try {
-      // Determine companyId from actor context
-      const companyId = req.actor.type === "agent"
-        ? req.actor.agentId
-          ? (await svc.getById(req.actor.agentId))?.companyId ?? null
-          : null
-        : null;
+      const companyId = await resolveCompanyIdForAgentReference(req);
       if (!companyId) {
-        _res.status(400).json({ error: "Cannot determine company context" });
+        _res.status(400).json({ error: "Cannot determine company context (provide ?companyId=...)" });
         return;
       }
-      assertCompanyAccess(req, companyId);
 
       const govSvc = governanceSettingsService(db);
       const settings = await govSvc.get();
@@ -2449,16 +2448,11 @@ export function agentRoutes(db: Db) {
   // PATCH /api/governance-settings — update global governance settings (board/CTO only)
   router.patch("/governance-settings", async (req, res, next) => {
     try {
-      const companyId = req.actor.type === "agent"
-        ? req.actor.agentId
-          ? (await svc.getById(req.actor.agentId))?.companyId ?? null
-          : null
-        : null;
+      const companyId = await resolveCompanyIdForAgentReference(req);
       if (!companyId) {
-        res.status(400).json({ error: "Cannot determine company context" });
+        res.status(400).json({ error: "Cannot determine company context (provide ?companyId=...)" });
         return;
       }
-      assertCompanyAccess(req, companyId);
 
       if (req.actor.type === "agent") {
         const agent = req.actor.agentId ? await svc.getById(req.actor.agentId) : null;

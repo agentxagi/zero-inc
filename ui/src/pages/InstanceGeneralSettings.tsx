@@ -57,6 +57,18 @@ export function InstanceGeneralSettings() {
     },
   });
 
+  const operationsPauseMutation = useMutation({
+    mutationFn: async (paused: boolean) =>
+      instanceSettingsApi.updateGeneral({ operationsPaused: paused }),
+    onSuccess: async () => {
+      setActionError(null);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.instance.generalSettings });
+    },
+    onError: (error) => {
+      setActionError(error instanceof Error ? error.message : "Failed to update operations pause setting.");
+    },
+  });
+
   if (generalQuery.isLoading) {
     return <div className="text-sm text-muted-foreground">Loading general settings...</div>;
   }
@@ -72,6 +84,7 @@ export function InstanceGeneralSettings() {
   }
 
   const censorUsernameInLogs = generalQuery.data?.censorUsernameInLogs === true;
+  const operationsPaused = generalQuery.data?.operationsPaused === true;
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -115,6 +128,35 @@ export function InstanceGeneralSettings() {
               className={cn(
                 "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
                 censorUsernameInLogs ? "translate-x-4.5" : "translate-x-0.5",
+              )}
+            />
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <h2 className="text-sm font-semibold">Pause agent operations</h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Stops new heartbeat execution globally (timer, assignment, automation, and manual wakeups). Running tasks
+              are not cancelled.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Toggle global operations pause"
+            disabled={operationsPauseMutation.isPending}
+            className={cn(
+              "relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              operationsPaused ? "bg-amber-600" : "bg-muted",
+            )}
+            onClick={() => operationsPauseMutation.mutate(!operationsPaused)}
+          >
+            <span
+              className={cn(
+                "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+                operationsPaused ? "translate-x-4.5" : "translate-x-0.5",
               )}
             />
           </button>

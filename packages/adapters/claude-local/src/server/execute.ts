@@ -167,6 +167,10 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
   const linkedIssueIds = Array.isArray(context.issueIds)
     ? context.issueIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     : [];
+  const preferredResponseLanguage =
+    typeof context.preferredResponseLanguage === "string" && context.preferredResponseLanguage.trim().length > 0
+      ? context.preferredResponseLanguage.trim()
+      : null;
 
   if (wakeTaskId) {
     env.PAPERCLIP_TASK_ID = wakeTaskId;
@@ -185,6 +189,9 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
   }
   if (linkedIssueIds.length > 0) {
     env.PAPERCLIP_LINKED_ISSUE_IDS = linkedIssueIds.join(",");
+  }
+  if (preferredResponseLanguage) {
+    env.PAPERCLIP_PREFERRED_RESPONSE_LANGUAGE = preferredResponseLanguage;
   }
   if (effectiveWorkspaceCwd) {
     env.PAPERCLIP_WORKSPACE_CWD = effectiveWorkspaceCwd;

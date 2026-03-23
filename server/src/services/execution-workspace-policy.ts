@@ -136,6 +136,7 @@ export function resolveExecutionWorkspaceMode(input: {
   projectPolicy: ProjectExecutionWorkspacePolicy | null;
   issueSettings: IssueExecutionWorkspaceSettings | null;
   legacyUseProjectWorkspace: boolean | null;
+  preferIsolatedWorkspace?: boolean;
 }): ParsedExecutionWorkspaceMode {
   const issueMode = input.issueSettings?.mode;
   if (issueMode && issueMode !== "inherit" && issueMode !== "reuse_existing") {
@@ -149,6 +150,9 @@ export function resolveExecutionWorkspaceMode(input: {
   }
   if (input.legacyUseProjectWorkspace === false) {
     return "agent_default";
+  }
+  if (input.preferIsolatedWorkspace) {
+    return "isolated_workspace";
   }
   return "shared_workspace";
 }
@@ -167,7 +171,11 @@ export function buildExecutionWorkspaceAdapterConfig(input: {
     input.issueSettings?.workspaceStrategy ||
     input.issueSettings?.workspaceRuntime,
   );
-  const hasWorkspaceControl = projectHasPolicy || issueHasWorkspaceOverrides || input.legacyUseProjectWorkspace === false;
+  const hasWorkspaceControl =
+    projectHasPolicy ||
+    issueHasWorkspaceOverrides ||
+    input.legacyUseProjectWorkspace === false ||
+    input.mode === "isolated_workspace";
 
   if (hasWorkspaceControl) {
     if (input.mode === "isolated_workspace") {

@@ -4431,23 +4431,60 @@ export function heartbeatService(db: Db) {
         const runtimeCfg = parseObject(agent.runtimeConfig);
         const hbCfg = parseObject(runtimeCfg.heartbeat);
         const skipEmptyTimerWake = asBoolean(hbCfg.skipEmptyTimerWake, true);
-        if (skipEmptyTimerWake) {
-          const [{ count: openCount }] = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(issues)
-            .where(
-              and(
-                or(
-                  eq(issues.assigneeAgentId, agent.id),
-                  eq(issues.reviewerAgentId, agent.id),
-                ),
-                inArray(issues.status, ["todo", "in_progress", "blocked", "in_review"]),
+        const timerIssueCandidate = await db
+          .select({
+            id: issues.id,
+            projectId: issues.projectId,
+            status: issues.status,
+            identifier: issues.identifier,
+          })
+          .from(issues)
+          .where(
+            and(
+              eq(issues.companyId, agent.companyId),
+              or(
+                eq(issues.assigneeAgentId, agent.id),
+                eq(issues.reviewerAgentId, agent.id),
               ),
-            );
-          if (Number(openCount ?? 0) === 0) {
-            skipped += 1;
-            continue;
+              inArray(issues.status, ["todo", "in_progress", "blocked", "in_review"]),
+            ),
+          )
+          .orderBy(
+            sql`case
+              when ${issues.status} = 'in_progress' then 0
+              when ${issues.status} = 'blocked' then 1
+              when ${issues.status} = 'in_review' then 2
+              when ${issues.status} = 'todo' then 3
+              else 4
+            end`,
+            asc(issues.updatedAt),
+            asc(issues.createdAt),
+            asc(issues.id),
+          )
+          .limit(1)
+          .then((rows) => rows[0] ?? null);
+
+        if (skipEmptyTimerWake && !timerIssueCandidate) {
+          skipped += 1;
+          continue;
+        }
+
+        const timerContextSnapshot: Record<string, unknown> = {
+          source: "scheduler",
+          reason: "interval_elapsed",
+          now: now.toISOString(),
+        };
+        if (timerIssueCandidate) {
+          timerContextSnapshot.issueId = timerIssueCandidate.id;
+          timerContextSnapshot.taskId = timerIssueCandidate.id;
+          timerContextSnapshot.taskKey = timerIssueCandidate.id;
+          if (timerIssueCandidate.projectId) {
+            timerContextSnapshot.projectId = timerIssueCandidate.projectId;
           }
+          if (timerIssueCandidate.identifier) {
+            timerContextSnapshot.issueIdentifier = timerIssueCandidate.identifier;
+          }
+          timerContextSnapshot.issueStatus = timerIssueCandidate.status;
         }
 
         const run = await enqueueWakeup(agent.id, {
@@ -4456,11 +4493,7 @@ export function heartbeatService(db: Db) {
           reason: "heartbeat_timer",
           requestedByActorType: "system",
           requestedByActorId: "heartbeat_scheduler",
-          contextSnapshot: {
-            source: "scheduler",
-            reason: "interval_elapsed",
-            now: now.toISOString(),
-          },
+          contextSnapshot: timerContextSnapshot,
         });
         if (run) enqueued += 1;
         else skipped += 1;
@@ -4472,6 +4505,11 @@ export function heartbeatService(db: Db) {
     cancelRun: (runId: string) => cancelRunInternal(runId),
 
     cancelActiveForAgent: (agentId: string) => cancelActiveForAgentInternal(agentId),
+
+    cancelQueuedForOperationsPause: (
+      companyId: string,
+      reason = "Cancelled because instance operations were paused",
+    ) => cancelQueuedWorkForOperationsPause(companyId, reason),
 
     cancelBudgetScopeWork,
 

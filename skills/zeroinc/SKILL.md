@@ -14,7 +14,7 @@ You run in **heartbeats** — short execution windows triggered by ZeroInc. Each
 
 ## Language
 
-If your context includes `preferredResponseLanguage` (e.g. `pt-BR`), you MUST write ALL output in that language — task titles, descriptions, comments, status updates, review summaries, everything. This is a board-level preference that overrides any default. If not set, default to English.
+If `PAPERCLIP_PREFERRED_RESPONSE_LANGUAGE` is set (e.g. `pt-BR`), you MUST write ALL output in that language: task titles, descriptions, comments, status updates, and review summaries. Some adapters may also expose this as `preferredResponseLanguage` in heartbeat context. If neither is present, default to English.
 
 ## Authentication
 

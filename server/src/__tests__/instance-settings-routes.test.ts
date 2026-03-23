@@ -11,9 +11,13 @@ const mockInstanceSettingsService = vi.hoisted(() => ({
   updateExperimental: vi.fn(),
   listCompanyIds: vi.fn(),
 }));
+const mockHeartbeatService = vi.hoisted(() => ({
+  cancelQueuedForOperationsPause: vi.fn(),
+}));
 const mockLogActivity = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/index.js", () => ({
+  heartbeatService: () => mockHeartbeatService,
   instanceSettingsService: () => mockInstanceSettingsService,
   logActivity: mockLogActivity,
 }));
@@ -60,6 +64,10 @@ describe("instance settings routes", () => {
       },
     });
     mockInstanceSettingsService.listCompanyIds.mockResolvedValue(["company-1", "company-2"]);
+    mockHeartbeatService.cancelQueuedForOperationsPause.mockResolvedValue({
+      cancelledQueuedRuns: 0,
+      cancelledPendingWakeups: 0,
+    });
   });
 
   it("allows local board users to read and update experimental settings", async () => {
@@ -151,6 +159,82 @@ describe("instance settings routes", () => {
       censorUsernameInLogs: true,
     });
     expect(mockLogActivity).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels queued runs and pending wakeups when operations pause transitions to true", async () => {
+    mockInstanceSettingsService.getGeneral.mockResolvedValueOnce({
+      censorUsernameInLogs: false,
+      operationsPaused: false,
+    });
+    mockInstanceSettingsService.updateGeneral.mockResolvedValueOnce({
+      id: "instance-settings-1",
+      general: {
+        censorUsernameInLogs: false,
+        operationsPaused: true,
+      },
+    });
+    mockHeartbeatService.cancelQueuedForOperationsPause
+      .mockResolvedValueOnce({ cancelledQueuedRuns: 2, cancelledPendingWakeups: 3 })
+      .mockResolvedValueOnce({ cancelledQueuedRuns: 1, cancelledPendingWakeups: 4 });
+    const app = createApp({
+      type: "board",
+      userId: "local-board",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+    });
+
+    await request(app)
+      .patch("/api/instance/settings/general")
+      .send({ operationsPaused: true })
+      .expect(200);
+
+    expect(mockHeartbeatService.cancelQueuedForOperationsPause).toHaveBeenCalledTimes(2);
+    expect(mockHeartbeatService.cancelQueuedForOperationsPause).toHaveBeenNthCalledWith(
+      1,
+      "company-1",
+      "Cancelled because instance operations were paused by operator",
+    );
+    expect(mockHeartbeatService.cancelQueuedForOperationsPause).toHaveBeenNthCalledWith(
+      2,
+      "company-2",
+      "Cancelled because instance operations were paused by operator",
+    );
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        details: expect.objectContaining({
+          cancelledQueuedRuns: 3,
+          cancelledPendingWakeups: 7,
+        }),
+      }),
+    );
+  });
+
+  it("does not cancel queued work when operations paused was already true", async () => {
+    mockInstanceSettingsService.getGeneral.mockResolvedValueOnce({
+      censorUsernameInLogs: false,
+      operationsPaused: true,
+    });
+    mockInstanceSettingsService.updateGeneral.mockResolvedValueOnce({
+      id: "instance-settings-1",
+      general: {
+        censorUsernameInLogs: false,
+        operationsPaused: true,
+      },
+    });
+    const app = createApp({
+      type: "board",
+      userId: "local-board",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+    });
+
+    await request(app)
+      .patch("/api/instance/settings/general")
+      .send({ operationsPaused: true })
+      .expect(200);
+
+    expect(mockHeartbeatService.cancelQueuedForOperationsPause).not.toHaveBeenCalled();
   });
 
   it("rejects non-admin board users", async () => {

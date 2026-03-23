@@ -3,7 +3,7 @@ import type { Db } from "@zeroinc/db";
 import { patchInstanceExperimentalSettingsSchema, patchInstanceGeneralSettingsSchema } from "@zeroinc/shared";
 import { forbidden } from "../errors.js";
 import { validate } from "../middleware/validate.js";
-import { instanceSettingsService, logActivity } from "../services/index.js";
+import { heartbeatService, instanceSettingsService, logActivity } from "../services/index.js";
 import { getActorInfo } from "./authz.js";
 
 function assertCanManageInstanceSettings(req: Request) {
@@ -19,6 +19,7 @@ function assertCanManageInstanceSettings(req: Request) {
 export function instanceSettingsRoutes(db: Db) {
   const router = Router();
   const svc = instanceSettingsService(db);
+  const heartbeat = heartbeatService(db);
 
   router.get("/instance/settings/general", async (req, res) => {
     assertCanManageInstanceSettings(req);
@@ -30,9 +31,22 @@ export function instanceSettingsRoutes(db: Db) {
     validate(patchInstanceGeneralSettingsSchema),
     async (req, res) => {
       assertCanManageInstanceSettings(req);
+      const previousGeneral = await svc.getGeneral();
       const updated = await svc.updateGeneral(req.body);
       const actor = getActorInfo(req);
       const companyIds = await svc.listCompanyIds();
+      const pauseTransitionedToTrue =
+        previousGeneral.operationsPaused !== true && updated.general.operationsPaused === true;
+      let cancelledQueuedRuns = 0;
+      let cancelledPendingWakeups = 0;
+      if (pauseTransitionedToTrue) {
+        const reason = "Cancelled because instance operations were paused by operator";
+        const cancelledByCompany = await Promise.all(
+          companyIds.map((companyId) => heartbeat.cancelQueuedForOperationsPause(companyId, reason)),
+        );
+        cancelledQueuedRuns = cancelledByCompany.reduce((sum, item) => sum + item.cancelledQueuedRuns, 0);
+        cancelledPendingWakeups = cancelledByCompany.reduce((sum, item) => sum + item.cancelledPendingWakeups, 0);
+      }
       await Promise.all(
         companyIds.map((companyId) =>
           logActivity(db, {
@@ -47,6 +61,12 @@ export function instanceSettingsRoutes(db: Db) {
             details: {
               general: updated.general,
               changedKeys: Object.keys(req.body).sort(),
+              ...(pauseTransitionedToTrue
+                ? {
+                    cancelledQueuedRuns,
+                    cancelledPendingWakeups,
+                  }
+                : {}),
             },
           }),
         ),

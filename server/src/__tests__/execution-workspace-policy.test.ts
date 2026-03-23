@@ -52,6 +52,17 @@ describe("execution workspace policy helpers", () => {
     ).toBe("agent_default");
   });
 
+  it("can prefer isolated workspace when no explicit project/issue policy exists", () => {
+    expect(
+      resolveExecutionWorkspaceMode({
+        projectPolicy: null,
+        issueSettings: null,
+        legacyUseProjectWorkspace: null,
+        preferIsolatedWorkspace: true,
+      }),
+    ).toBe("isolated_workspace");
+  });
+
   it("applies project policy strategy and runtime defaults when isolation is enabled", () => {
     const result = buildExecutionWorkspaceAdapterConfig({
       agentConfig: {
@@ -82,6 +93,17 @@ describe("execution workspace policy helpers", () => {
     expect(result.workspaceRuntime).toEqual({
       services: [{ name: "web", command: "pnpm dev" }],
     });
+  });
+
+  it("defaults to git worktree when mode is isolated even without project policy", () => {
+    const result = buildExecutionWorkspaceAdapterConfig({
+      agentConfig: {},
+      projectPolicy: null,
+      issueSettings: null,
+      mode: "isolated_workspace",
+      legacyUseProjectWorkspace: null,
+    });
+    expect(result.workspaceStrategy).toEqual({ type: "git_worktree" });
   });
 
   it("clears managed workspace strategy when issue opts out to project primary or agent default", () => {
