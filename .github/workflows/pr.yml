@@ -86,6 +86,81 @@ jobs:
           git checkout -- pnpm-lock.yaml
           ./scripts/release.sh canary --skip-verify --dry-run
 
+  smoke:
+    needs: [verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Generate Paperclip config
+        run: |
+          mkdir -p ~/.paperclip/instances/default
+          cat > ~/.paperclip/instances/default/config.json << 'CONF'
+          {
+            "$meta": { "version": 1, "updatedAt": "2026-01-01T00:00:00.000Z", "source": "onboard" },
+            "database": { "mode": "embedded-postgres" },
+            "logging": { "mode": "file" },
+            "server": { "deploymentMode": "local_trusted", "host": "127.0.0.1", "port": 3100 },
+            "auth": { "baseUrlMode": "auto" },
+            "storage": { "provider": "local_disk" },
+            "secrets": { "provider": "local_encrypted", "strictMode": false }
+          }
+          CONF
+
+      - name: Smoke test — start server, hit health, shut down
+        env:
+          PAPERCLIP_MIGRATION_PROMPT: never
+          PAPERCLIP_MIGRATION_AUTO_APPLY: "true"
+        run: |
+          set -euo pipefail
+
+          # Start server in background
+          node server/dist/index.js &
+          SERVER_PID=$!
+
+          # Wait for server to be ready (max 60s)
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3100/api/health > /dev/null 2>&1; then
+              echo "Server is healthy"
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              echo "ERROR: Server process exited unexpectedly"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          # Verify health endpoint response
+          BODY=$(curl -sf http://127.0.0.1:3100/api/health)
+          echo "Health response: $BODY"
+          echo "$BODY" | jq -e '.status == "ok"' > /dev/null
+
+          # Graceful shutdown
+          kill "$SERVER_PID" 2>/dev/null || true
+          wait "$SERVER_PID" 2>/dev/null || true
+          echo "Smoke test passed"
+
   e2e:
     needs: [policy]
     runs-on: ubuntu-latest
