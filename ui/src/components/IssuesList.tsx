@@ -47,6 +47,7 @@ export type IssueViewState = {
   groupBy: "status" | "priority" | "assignee" | "none";
   viewMode: "list" | "board";
   collapsedGroups: string[];
+  needsApproval: boolean;
 };
 
 const defaultViewState: IssueViewState = {
@@ -60,6 +61,7 @@ const defaultViewState: IssueViewState = {
   groupBy: "none",
   viewMode: "list",
   collapsedGroups: [],
+  needsApproval: false,
 };
 
 const quickFilterPresets = [
