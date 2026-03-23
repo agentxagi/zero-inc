@@ -94,6 +94,7 @@ export function reviewPipelineService(db: Db, wakeupDeps?: ReviewPipelineWakeupD
           ne(agents.status, "error"),
           ne(agents.id, issue.assigneeAgentId ?? ""),
           inArray(agents.role, config.reviewerRoles),
+          eq(agents.qualityAutoAssign, true),
         ),
       )
       .limit(1);
@@ -102,7 +103,7 @@ export function reviewPipelineService(db: Db, wakeupDeps?: ReviewPipelineWakeupD
       reviewerAgentId = matched.id;
     } else {
       // Smart fallback: pick the most qualified available agent (by qualityScore)
-      // Exclude the assignee and terminated/error agents
+      // Exclude the assignee, terminated/error agents, and agents with autoAssign disabled
       const [fallback] = await db
         .select({ id: agents.id })
         .from(agents)
@@ -112,6 +113,7 @@ export function reviewPipelineService(db: Db, wakeupDeps?: ReviewPipelineWakeupD
             ne(agents.status, "terminated"),
             ne(agents.status, "error"),
             ne(agents.id, issue.assigneeAgentId ?? ""),
+            eq(agents.qualityAutoAssign, true),
           ),
         )
         .orderBy(desc(agents.qualityScore))

@@ -188,13 +188,78 @@ describe("staleDetectionService", () => {
         [],           // 2. findStaleIssues for block
         [],           // 3. findStaleIssues for escalate
         [staleIssue], // 4. findStaleIssues for review
-        [],           // 5. hasRecentStaleComment → no recent
-        [],           // 6. findDoneIssuesNoQuality
+        [{ reviewerAgentId: "reviewer-1" }], // 5. findReviewerEligibility: get reviewerAgentId from issue
+        [{ status: "active", qualityAutoAssign: true }], // 6. findReviewerEligibility: get reviewer agent details
+        [],           // 7. hasRecentStaleComment → no recent
+        [],           // 8. findDoneIssuesNoQuality
       ]);
 
       const svc = staleDetectionService(db);
       const actions = await svc.detect();
       expect(actions.some(a => a.action === "ping_reviewer")).toBe(true);
+    });
+
+    it("auto-approves orphaned in_review when reviewer has qualityAutoAssign disabled", async () => {
+      const staleIssue = makeIssue({
+        status: "in_review",
+        updatedAt: new Date(Date.now() - 130 * 60 * 1000), // past 120min ping
+      });
+      setupSelects([
+        [],           // 1. findStaleIssues for warn
+        [],           // 2. findStaleIssues for block
+        [],           // 3. findStaleIssues for escalate
+        [staleIssue], // 4. findStaleIssues for review
+        [{ reviewerAgentId: "reviewer-1" }], // 5. findReviewerEligibility: get reviewerAgentId
+        [{ status: "active", qualityAutoAssign: false }], // 6. findReviewerEligibility: autoAssign disabled
+        [],           // 7. hasRecentStaleComment → no recent
+        [],           // 8. findDoneIssuesNoQuality
+      ]);
+
+      const svc = staleDetectionService(db);
+      const actions = await svc.detect();
+      expect(actions.some(a => a.action === "auto_approve_orphan")).toBe(true);
+      expect(actions.some(a => a.action === "ping_reviewer")).toBe(false);
+    });
+
+    it("auto-approves orphaned in_review when reviewer is terminated", async () => {
+      const staleIssue = makeIssue({
+        status: "in_review",
+        updatedAt: new Date(Date.now() - 130 * 60 * 1000),
+      });
+      setupSelects([
+        [],           // 1. findStaleIssues for warn
+        [],           // 2. findStaleIssues for block
+        [],           // 3. findStaleIssues for escalate
+        [staleIssue], // 4. findStaleIssues for review
+        [{ reviewerAgentId: "reviewer-1" }], // 5. findReviewerEligibility: get reviewerAgentId
+        [{ status: "terminated", qualityAutoAssign: true }], // 6. findReviewerEligibility: terminated
+        [],           // 7. hasRecentStaleComment → no recent
+        [],           // 8. findDoneIssuesNoQuality
+      ]);
+
+      const svc = staleDetectionService(db);
+      const actions = await svc.detect();
+      expect(actions.some(a => a.action === "auto_approve_orphan")).toBe(true);
+    });
+
+    it("auto-approves orphaned in_review when no reviewer assigned", async () => {
+      const staleIssue = makeIssue({
+        status: "in_review",
+        updatedAt: new Date(Date.now() - 130 * 60 * 1000),
+      });
+      setupSelects([
+        [],           // 1. findStaleIssues for warn
+        [],           // 2. findStaleIssues for block
+        [],           // 3. findStaleIssues for escalate
+        [staleIssue], // 4. findStaleIssues for review
+        [{ reviewerAgentId: null }], // 5. findReviewerEligibility: no reviewer
+        [],           // 6. hasRecentStaleComment → no recent
+        [],           // 7. findDoneIssuesNoQuality
+      ]);
+
+      const svc = staleDetectionService(db);
+      const actions = await svc.detect();
+      expect(actions.some(a => a.action === "auto_approve_orphan")).toBe(true);
     });
 
     it("skips issues with recent stale comments (dedup)", async () => {

@@ -183,6 +183,91 @@ describe("Review Pipeline Service", () => {
       );
       expect(sentToReview).toBe(false);
     });
+
+    it("skips review and posts warning when no reviewer available", async () => {
+      const { mockDb, getLastInsertValues } = createMockDb({ reviewerRows: [] });
+      const pipeline = reviewPipelineService(mockDb);
+      const sentToReview = await pipeline.transitionToReview(
+        "issue-1",
+        "engineer-1",
+        { passed: true, checks: [] },
+        DEFAULT_REVIEW_PIPELINE_CONFIG,
+      );
+      expect(sentToReview).toBe(false);
+      const comment = getLastInsertValues();
+      expect(comment?.body).toContain("Review Skipped");
+      expect(comment?.body).toContain("No available reviewer found");
+    });
+
+    it("recovers stuck task with approved verdict back to done", async () => {
+      // Simulate a task that has reviewVerdict=approved but is stuck in_review
+      // The transitionToReview function first checks existing reviewVerdict
+      let selectCallCount = 0;
+
+      function makeWhereResultWithLimit(rows: Record<string, unknown>[]) {
+        const direct = Promise.resolve(rows) as Promise<Record<string, unknown>[]> & {
+          limit: ReturnType<typeof vi.fn>;
+          orderBy: ReturnType<typeof vi.fn>;
+        };
+        direct.limit = vi.fn().mockResolvedValue(rows);
+        direct.orderBy = vi.fn().mockReturnValue({
+          limit: vi.fn().mockResolvedValue(rows),
+        });
+        return direct;
+      }
+
+      const mockDbCustom = {
+        select: vi.fn().mockImplementation(() => {
+          selectCallCount += 1;
+          return {
+            from: (table: unknown) => {
+              if (table === agents) {
+                return {
+                  where: () => makeWhereResultWithLimit([]),
+                };
+              }
+              // issues table: first call returns approved verdict (recovery check)
+              // subsequent calls return companyId for comment insertion
+              if (selectCallCount === 1) {
+                return {
+                  where: vi.fn().mockReturnValue(makeWhereResultWithLimit([{ reviewVerdict: "approved" }])),
+                };
+              }
+              return {
+                where: vi.fn().mockReturnValue(makeWhereResultWithLimit([{ companyId: "company-1" }])),
+              };
+            },
+          };
+        }),
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockImplementation(() => ({
+            where: vi.fn().mockResolvedValue(undefined),
+          })),
+        }),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockResolvedValue([{ id: "comment-1" }]),
+        }),
+        transaction: vi.fn().mockImplementation(async (fn: (tx: unknown) => Promise<void>) => {
+          await fn({
+            update: vi.fn().mockReturnValue({
+              set: vi.fn().mockImplementation(() => ({
+                where: vi.fn().mockResolvedValue(undefined),
+              })),
+            }),
+          });
+        }),
+      };
+
+      const pipeline = reviewPipelineService(mockDbCustom as any);
+      const sentToReview = await pipeline.transitionToReview(
+        "issue-1",
+        "engineer-1",
+        { passed: true, checks: [] },
+        DEFAULT_REVIEW_PIPELINE_CONFIG,
+      );
+      // Should skip review since verdict is already approved
+      expect(sentToReview).toBe(false);
+    });
   });
 
   describe("submitReview", () => {
@@ -268,6 +353,56 @@ describe("Review Pipeline Service", () => {
       );
       expect(result.success).toBe(true);
       expect(result.escalated).toBe(true);
+    });
+
+    it("changes requested before max cycles reassigns to original engineer", async () => {
+      const { mockDb, getLastUpdateSet } = createMockDb({
+        issueRow: {
+          status: "in_review",
+          assigneeAgentId: "engineer-1",
+          originalAssigneeId: "original-engineer",
+          reviewCount: 1,
+          companyId: "company-1",
+        },
+      });
+      const pipeline = reviewPipelineService(mockDb);
+      const result = await pipeline.submitReview(
+        "issue-1", "reviewer-1",
+        { verdict: "changes_requested", summary: "Fix imports" },
+        DEFAULT_REVIEW_PIPELINE_CONFIG,
+      );
+      expect(result.success).toBe(true);
+      expect(result.escalated).toBeUndefined();
+      const set = getLastUpdateSet();
+      expect(set?.status).toBe("in_progress");
+      expect(set?.assigneeAgentId).toBe("original-engineer");
+      expect(set?.reviewerAgentId).toBeNull();
+    });
+
+    it("posts review comment with findings and questions", async () => {
+      const { mockDb, getLastInsertValues } = createMockDb();
+      const pipeline = reviewPipelineService(mockDb);
+      await pipeline.submitReview(
+        "issue-1", "reviewer-1",
+        {
+          verdict: "changes_requested",
+          summary: "Needs work",
+          findings: [
+            { severity: "blocker", message: "Missing error handling", file: "src/index.ts", line: 42 },
+            { severity: "suggestion", message: "Use const instead of let" },
+          ],
+          questions: ["Why was this approach chosen?"],
+        },
+        DEFAULT_REVIEW_PIPELINE_CONFIG,
+      );
+      const comment = getLastInsertValues();
+      expect(comment?.body).toContain("Changes Requested");
+      expect(comment?.body).toContain("Needs work");
+      expect(comment?.body).toContain("[blocker]");
+      expect(comment?.body).toContain("src/index.ts:42");
+      expect(comment?.body).toContain("Missing error handling");
+      expect(comment?.body).toContain("[suggestion]");
+      expect(comment?.body).toContain("Why was this approach chosen?");
     });
   });
 });

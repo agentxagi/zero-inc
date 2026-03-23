@@ -133,6 +133,20 @@ describe("execution workspace policy helpers", () => {
     expect(agentDefault.workspaceRuntime).toBeUndefined();
   });
 
+  it("does not inherit legacy git worktree strategy when mode resolves to shared workspace", () => {
+    const result = buildExecutionWorkspaceAdapterConfig({
+      agentConfig: {
+        workspaceStrategy: { type: "git_worktree", branchTemplate: "{{issue.identifier}}" },
+      },
+      projectPolicy: null,
+      issueSettings: null,
+      mode: "shared_workspace",
+      legacyUseProjectWorkspace: null,
+    });
+
+    expect(result.workspaceStrategy).toBeUndefined();
+  });
+
   it("parses persisted JSON payloads into typed project and issue workspace settings", () => {
     expect(
       parseProjectExecutionWorkspacePolicy({

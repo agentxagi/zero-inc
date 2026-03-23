@@ -19,7 +19,7 @@ interface StaleIssue {
 interface StaleAction {
   issueId: string;
   companyId: string;
-  action: "warn" | "block" | "escalate" | "ping_reviewer" | "flag_qa" | "comment";
+  action: "warn" | "block" | "escalate" | "ping_reviewer" | "flag_qa" | "comment" | "auto_approve_orphan";
   reason: string;
   newStatus?: string;
 }
@@ -92,10 +92,30 @@ export function staleDetectionService(db: Db, wakeupDeps?: StaleDetectionWakeupD
       });
     }
 
-    // 4. Stale in_review > ping threshold → ping reviewer
+    // 4. Stale in_review > ping threshold → check reviewer eligibility, then ping or auto-approve
     const reviewThreshold = new Date(now.getTime() - settings.staleInReviewPingMinutes * 60 * 1000);
     const reviewIssues = await findStaleIssues("in_review", reviewThreshold);
     for (const issue of reviewIssues) {
+      // Check if the assigned reviewer is eligible
+      const reviewer = await findReviewerEligibility(issue.id);
+      if (reviewer === "no_reviewer" || reviewer === "bad_reviewer") {
+        // No reviewer or ineligible reviewer — auto-approve the task
+        const recentStaleComment = await hasRecentStaleComment(issue.id, "stale-auto-approve");
+        if (recentStaleComment) continue;
+
+        actions.push({
+          issueId: issue.id,
+          companyId: issue.companyId,
+          action: "auto_approve_orphan",
+          reason: reviewer === "no_reviewer"
+            ? `Task has been in_review for ${settings.staleInReviewPingMinutes} minutes with no reviewer assigned. Auto-approving.`
+            : `Task has been in_review for ${settings.staleInReviewPingMinutes} minutes with an ineligible reviewer (terminated/error/autoAssign disabled). Auto-approving.`,
+          newStatus: "done",
+        });
+        continue;
+      }
+
+      // Reviewer is eligible — just ping them
       const recentStaleComment = await hasRecentStaleComment(issue.id, "stale-review-ping");
       if (recentStaleComment) continue;
 
@@ -229,6 +249,31 @@ export function staleDetectionService(db: Db, wakeupDeps?: StaleDetectionWakeupD
     return result[0] ?? null;
   }
 
+  // Check if the assigned reviewer on an in_review task is eligible to review.
+  // Returns "no_reviewer" if reviewerAgentId is null, "bad_reviewer" if the
+  // reviewer is terminated/error/has autoAssign disabled, or "eligible".
+  async function findReviewerEligibility(issueId: string): Promise<"no_reviewer" | "bad_reviewer" | "eligible"> {
+    const [issue] = await db
+      .select({ reviewerAgentId: issues.reviewerAgentId })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (!issue?.reviewerAgentId) return "no_reviewer";
+
+    const [reviewer] = await db
+      .select({ status: agents.status, qualityAutoAssign: agents.qualityAutoAssign })
+      .from(agents)
+      .where(eq(agents.id, issue.reviewerAgentId))
+      .limit(1);
+
+    if (!reviewer) return "bad_reviewer";
+    if (reviewer.status === "terminated" || reviewer.status === "error") return "bad_reviewer";
+    if (!reviewer.qualityAutoAssign) return "bad_reviewer";
+
+    return "eligible";
+  }
+
   async function applyAction(action: StaleAction): Promise<void> {
     const systemActor = { agentId: undefined, userId: undefined };
 
@@ -304,6 +349,25 @@ export function staleDetectionService(db: Db, wakeupDeps?: StaleDetectionWakeupD
           authorUserId: null,
           body: `[stale:stale-qa-flag] ${action.reason}\n\n_Auto-detected by stale detection._`,
         });
+        break;
+      }
+      case "auto_approve_orphan": {
+        await db.insert(issueComments).values({
+          companyId: action.companyId,
+          issueId: action.issueId,
+          authorAgentId: null,
+          authorUserId: null,
+          body: `[stale:stale-auto-approve] ${action.reason}\n\n_Auto-detected by stale detection._`,
+        });
+        if (action.newStatus) {
+          await db.update(issues).set({
+            status: action.newStatus,
+            reviewVerdict: "approved",
+            reviewerAgentId: null,
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          }).where(eq(issues.id, action.issueId));
+        }
         break;
       }
     }

@@ -165,6 +165,15 @@ export function buildExecutionWorkspaceAdapterConfig(input: {
   legacyUseProjectWorkspace: boolean | null;
 }): Record<string, unknown> {
   const nextConfig = { ...input.agentConfig };
+  const shouldEnforceSharedWorkspaceStrategy =
+    input.mode === "shared_workspace" || input.mode === "operator_branch";
+  if (shouldEnforceSharedWorkspaceStrategy) {
+    const configuredStrategy = parseExecutionWorkspaceStrategy(nextConfig.workspaceStrategy);
+    if (configuredStrategy?.type === "git_worktree") {
+      // Shared/operator modes should not inherit legacy git-worktree defaults from agent config.
+      delete nextConfig.workspaceStrategy;
+    }
+  }
   const projectHasPolicy = Boolean(input.projectPolicy?.enabled);
   const issueHasWorkspaceOverrides = Boolean(
     input.issueSettings?.mode ||
