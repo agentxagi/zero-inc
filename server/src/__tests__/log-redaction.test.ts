@@ -20,9 +20,9 @@ describe("log redaction", () => {
       homeDirs: [`/Users/${userName}`, `/home/${userName}`, `C:\\Users\\${userName}`],
     });
 
-    expect(result).toContain(`cwd=/Users/${maskedUserName}/paperclip`);
+    expect(result).toContain(`cwd=/Users/${maskedUserName}/zeroinc`);
     expect(result).toContain(`home=/home/${maskedUserName}/workspace`);
-    expect(result).toContain(`win=C:\\Users\\${maskedUserName}\\paperclip`);
+    expect(result).toContain(`win=C:\\Users\\${maskedUserName}\\zeroinc`);
     expect(result).not.toContain(userName);
   });
 
@@ -38,7 +38,7 @@ describe("log redaction", () => {
     );
 
     expect(result).toBe(
-      `user ${maskedUserName} said ${maskedUserName}/project should stay but apaperclipuserz should not change`,
+      `user ${maskedUserName} said ${maskedUserName}/project should stay but azeroincuserz should not change`,
     );
   });
 
@@ -58,8 +58,8 @@ describe("log redaction", () => {
     });
 
     expect(result).toEqual({
-      cwd: `/Users/${maskedUserName}/paperclip`,
-      prompt: `open /Users/${maskedUserName}/paperclip/ui`,
+      cwd: `/Users/${maskedUserName}/zeroinc`,
+      prompt: `open /Users/${maskedUserName}/zeroinc/ui`,
       nested: {
         author: maskedUserName,
       },

@@ -371,16 +371,30 @@ export async function listZeroIncSkillEntries(
   if (!root) return [];
 
   try {
+    const normalizeRuntimeName = (name: string): string => {
+      if (name === "zeroinc") return "paperclip";
+      if (name.startsWith("zeroinc-")) {
+        return `paperclip-${name.slice("zeroinc-".length)}`;
+      }
+      return name;
+    };
     const entries = await fs.readdir(root, { withFileTypes: true });
-    return entries
+    const skillEntries = entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => ({
-        key: `paperclipai/paperclip/${entry.name}`,
-        runtimeName: entry.name,
+        key: `paperclipai/paperclip/${normalizeRuntimeName(entry.name)}`,
+        runtimeName: normalizeRuntimeName(entry.name),
         source: path.join(root, entry.name),
         required: true,
         requiredReason: "Bundled Paperclip skills are always available for local adapters.",
       }));
+    const uniqueByKey = new Map<string, PaperclipSkillEntry>();
+    for (const entry of skillEntries) {
+      if (!uniqueByKey.has(entry.key)) {
+        uniqueByKey.set(entry.key, entry);
+      }
+    }
+    return Array.from(uniqueByKey.values());
   } catch {
     return [];
   }

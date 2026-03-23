@@ -49,7 +49,8 @@ describe("codex local adapter skill injection", () => {
 
     await createZeroIncRepoSkill(currentRepo, "zeroinc");
     await createZeroIncRepoSkill(oldRepo, "zeroinc");
-    await fs.symlink(path.join(oldRepo, "skills", "zeroinc"), path.join(skillsHome, "zeroinc"));
+    await fs.symlink(path.join(oldRepo, "skills", "zeroinc"), path.join(skillsHome, "paperclip"));
+    await fs.rm(path.join(oldRepo, "skills", "zeroinc"), { recursive: true, force: true });
 
     const logs: Array<{ stream: "stdout" | "stderr"; chunk: string }> = [];
     await ensureCodexSkillsInjected(
@@ -61,18 +62,18 @@ describe("codex local adapter skill injection", () => {
         skillsEntries: [{
           key: paperclipKey,
           runtimeName: "paperclip",
-          source: path.join(currentRepo, "skills", "paperclip"),
+          source: path.join(currentRepo, "skills", "zeroinc"),
         }],
       },
     );
 
-    expect(await fs.realpath(path.join(skillsHome, "zeroinc"))).toBe(
+    expect(await fs.realpath(path.join(skillsHome, "paperclip"))).toBe(
       await fs.realpath(path.join(currentRepo, "skills", "zeroinc")),
     );
     expect(logs).toContainEqual(
       expect.objectContaining({
         stream: "stdout",
-        chunk: expect.stringContaining('Repaired Codex skill "zeroinc"'),
+        chunk: expect.stringContaining('Repaired Codex skill "paperclip"'),
       }),
     );
   });
@@ -94,7 +95,7 @@ describe("codex local adapter skill injection", () => {
       skillsEntries: [{
         key: paperclipKey,
         runtimeName: "paperclip",
-        source: path.join(currentRepo, "skills", "paperclip"),
+        source: path.join(currentRepo, "skills", "zeroinc"),
       }],
     });
 
@@ -111,8 +112,8 @@ describe("codex local adapter skill injection", () => {
     cleanupDirs.add(oldRepo);
     cleanupDirs.add(skillsHome);
 
-    await createPaperclipRepoSkill(currentRepo, "paperclip");
-    await createPaperclipRepoSkill(oldRepo, "agent-browser");
+    await createZeroIncRepoSkill(currentRepo, "zeroinc");
+    await createZeroIncRepoSkill(oldRepo, "agent-browser");
     const staleTarget = path.join(oldRepo, "skills", "agent-browser");
     await fs.symlink(staleTarget, path.join(skillsHome, "agent-browser"));
     await fs.rm(staleTarget, { recursive: true, force: true });
@@ -127,7 +128,7 @@ describe("codex local adapter skill injection", () => {
         skillsEntries: [{
           key: paperclipKey,
           runtimeName: "paperclip",
-          source: path.join(currentRepo, "skills", "paperclip"),
+          source: path.join(currentRepo, "skills", "zeroinc"),
         }],
       },
     );
@@ -149,8 +150,8 @@ describe("codex local adapter skill injection", () => {
     cleanupDirs.add(currentRepo);
     cleanupDirs.add(skillsHome);
 
-    await createPaperclipRepoSkill(currentRepo, "paperclip");
-    await createPaperclipRepoSkill(currentRepo, "agent-browser");
+    await createZeroIncRepoSkill(currentRepo, "zeroinc");
+    await createZeroIncRepoSkill(currentRepo, "agent-browser");
     await fs.symlink(
       path.join(currentRepo, "skills", "agent-browser"),
       path.join(skillsHome, "agent-browser"),
@@ -161,7 +162,7 @@ describe("codex local adapter skill injection", () => {
       skillsEntries: [{
         key: paperclipKey,
         runtimeName: "paperclip",
-        source: path.join(currentRepo, "skills", "paperclip"),
+        source: path.join(currentRepo, "skills", "zeroinc"),
       }],
     });
 

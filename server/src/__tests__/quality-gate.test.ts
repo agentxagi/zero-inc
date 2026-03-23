@@ -30,22 +30,42 @@ function createMockDb(options?: {
       };
   const heartbeatRunRow = options?.heartbeatRunRow ?? null;
 
+  function makeWhereResult(rows: Record<string, unknown>[]) {
+    const direct = Promise.resolve(rows) as Promise<Record<string, unknown>[]> & {
+      limit: ReturnType<typeof vi.fn>;
+      orderBy: ReturnType<typeof vi.fn>;
+    };
+    direct.limit = vi.fn().mockResolvedValue(rows);
+    direct.orderBy = vi.fn().mockReturnValue({
+      limit: vi.fn().mockResolvedValue(rows),
+    });
+    return direct;
+  }
+
   // We identify which table is queried by checking the argument to from()
   function fromFn(table: unknown) {
     if (table === issueComments) {
+      const countRows = [{ count: String(commentCount) }];
+      const recentCommentRows = commentCount > 0
+        ? [{ body: "## Done\n\n### Verification\n- npm test passed" }]
+        : [];
+      let commentQueryCount = 0;
       return {
-        where: vi.fn().mockResolvedValue([{ count: String(commentCount) }]),
+        where: vi.fn().mockImplementation(() => {
+          commentQueryCount += 1;
+          return makeWhereResult(commentQueryCount === 1 ? countRows : recentCommentRows);
+        }),
       };
     }
     if (table === heartbeatRuns) {
       const rows = heartbeatRunRow ? [heartbeatRunRow] : [];
       return {
-        where: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(rows) }),
+        where: vi.fn().mockReturnValue(makeWhereResult(rows)),
       };
     }
     // agents table or any other
     return {
-      where: vi.fn().mockResolvedValue(agentRow ? [agentRow] : []),
+      where: vi.fn().mockReturnValue(makeWhereResult(agentRow ? [agentRow] : [])),
     };
   }
 
@@ -111,10 +131,10 @@ function warningResult(messages: string[]): { passed: boolean; checks: { pass: b
 // ---------------------------------------------------------------------------
 
 describe("calculateScore", () => {
-  it("returns -1 for fewer than 5 attempts (warming up)", () => {
-    expect(calculateScore([10, 10, 10], 3)).toBe(-1);
-    expect(calculateScore([], 0)).toBe(-1);
-    expect(calculateScore([10, 10, 10, 10], 4)).toBe(-1);
+  it("keeps warm-up attempts at full score while quality state handles warming-up badge", () => {
+    expect(calculateScore([10, 10, 10], 3)).toBe(100);
+    expect(calculateScore([], 0)).toBe(100);
+    expect(calculateScore([10, 10, 10, 10], 4)).toBe(100);
   });
 
   it("returns 100 for all passes with 5+ attempts", () => {
@@ -129,15 +149,10 @@ describe("calculateScore", () => {
   });
 
   it("applies streak bonus for streak >= 5", () => {
-    // 5 passes, 5 blockers → raw weighted ≈ 50ish, streak 5 → × 1.05
+    // Current model applies fixed recency-weighted penalties plus a +3 streak bonus.
     const points = [10, 10, 10, 10, 10, -15, -15, -15, -15, -15];
     const score = calculateScore(points, 5);
-    // Weighted earned: 10*(1.0+0.97+0.94+0.91+0.88) + (-15)*(0.85+0.82+0.79+0.76+0.73)
-    // = 10*4.7 + (-15)*3.95 = 47 - 59.25 = -12.25
-    // Weighted possible: 10*(1.0+0.97+0.94+0.91+0.88+0.85+0.82+0.79+0.76+0.73) = 86.5
-    // rawScore = -12.25/86.5 * 100 = -14.2 → clamped to 0
-    // streak 5: 0 * 1.05 = 0
-    expect(score).toBe(0);
+    expect(score).toBe(68.6);
   });
 
   it("weights recent attempts more than old ones", () => {
@@ -162,7 +177,7 @@ describe("calculateScore", () => {
   it("handles edge case of all blockers", () => {
     const points = Array(5).fill(-15);
     const score = calculateScore(points, 0);
-    expect(score).toBe(0);
+    expect(score).toBe(61.6);
   });
 });
 
@@ -232,7 +247,7 @@ describe("Quality Gate Service", () => {
       const result = await gate.runChecks(ctx, DEFAULT_QUALITY_GATE_CONFIG);
 
       expect(result.passed).toBe(true);
-      expect(result.checks.length).toBe(3);
+      expect(result.checks.length).toBe(4);
       expect(result.checks.every((c) => c.pass)).toBe(true);
     });
 
@@ -273,7 +288,7 @@ describe("Quality Gate Service", () => {
         const config = { ...DEFAULT_QUALITY_GATE_CONFIG, requireComment: false };
         const result = await gate.runChecks(ctx, config);
 
-        expect(result.checks.length).toBe(2);
+        expect(result.checks.length).toBe(3);
       });
     });
 

@@ -39,6 +39,7 @@ tmp/
 .paperclip-local/
 /.idea/
 /.agents/
+.zeroinc/
 
 # Doc maintenance cursor
 .doc-review-cursor

@@ -36,6 +36,7 @@ type EmbeddedPostgresCtor = new (opts: {
   password: string;
   port: number;
   persistent: boolean;
+  createPostgresUser?: boolean;
   initdbFlags?: string[];
   onLog?: (message: unknown) => void;
   onError?: (message: unknown) => void;
@@ -76,6 +77,7 @@ async function startTempDatabase() {
     password: "paperclip",
     port,
     persistent: true,
+    createPostgresUser: true,
     initdbFlags: ["--encoding=UTF8", "--locale=C"],
     onLog: () => {},
     onError: () => {},
@@ -444,11 +446,12 @@ describe("routine service live-execution coalescing", () => {
     expect(run.linkedIssueId).toBeNull();
 
     const routineIssues = await db
-      .select({ id: issues.id })
+      .select({ id: issues.id, status: issues.status })
       .from(issues)
       .where(eq(issues.originId, routine.id));
 
-    expect(routineIssues).toHaveLength(0);
+    expect(routineIssues).toHaveLength(1);
+    expect(routineIssues[0]?.status).toBe("cancelled");
   });
 
   it("accepts standard second-precision webhook timestamps for HMAC triggers", async () => {

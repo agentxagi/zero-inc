@@ -335,15 +335,18 @@ describe("Agent Schemas", () => {
   });
 
   describe("updateAgentPermissionsSchema", () => {
-    it("should require canCreateAgents", () => {
+    it("should require canCreateAgents and canAssignTasks", () => {
       const result = updateAgentPermissionsSchema.safeParse({
         canCreateAgents: true,
+        canAssignTasks: true,
       });
       expect(result.success).toBe(true);
     });
 
     it("should reject missing canCreateAgents", () => {
-      const result = updateAgentPermissionsSchema.safeParse({});
+      const result = updateAgentPermissionsSchema.safeParse({
+        canAssignTasks: true,
+      });
       expect(result.success).toBe(false);
     });
   });

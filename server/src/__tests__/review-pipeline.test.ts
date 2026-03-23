@@ -10,13 +10,17 @@ function createMockDb(overrides?: {
   issueRow?: Record<string, unknown> | null;
   reviewerRows?: Record<string, unknown>[];
 }) {
-  const issueRow = overrides?.issueRow ?? {
+  const defaultIssueRow = {
     companyId: "company-1",
     assigneeAgentId: "engineer-1",
     status: "in_review",
     originalAssigneeId: "engineer-1",
     reviewCount: 0,
   };
+  const issueRow =
+    overrides && Object.prototype.hasOwnProperty.call(overrides, "issueRow")
+      ? (overrides.issueRow ?? null)
+      : defaultIssueRow;
 
   const reviewerRows = overrides?.reviewerRows ?? [
     { id: "reviewer-1" },
@@ -24,24 +28,31 @@ function createMockDb(overrides?: {
 
   let lastUpdateSet: Record<string, unknown> | null = null;
   let lastInsertValues: Record<string, unknown> | null = null;
+  let reviewerQueryCount = 0;
+
+  function makeWhereResult(rows: Record<string, unknown>[]) {
+    const direct = Promise.resolve(rows) as Promise<Record<string, unknown>[]> & {
+      limit: ReturnType<typeof vi.fn>;
+      orderBy: ReturnType<typeof vi.fn>;
+    };
+    direct.limit = vi.fn().mockResolvedValue(rows);
+    direct.orderBy = vi.fn().mockReturnValue({
+      limit: vi.fn().mockResolvedValue(rows),
+    });
+    return direct;
+  }
 
   function fromFn(table: unknown) {
     if (table === agents) {
+      reviewerQueryCount += 1;
+      const firstPassRows = reviewerQueryCount === 1 ? reviewerRows : [];
+      const fallbackRows = reviewerRows.length > 0 ? [reviewerRows[0]!] : [];
       return {
-        where: vi.fn().mockResolvedValue(reviewerRows),
-      };
-    }
-    if (table === issueComments) {
-      return {
-        values: vi.fn().mockReturnValue({
-          onConflictDoUpdate: vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([{ id: "comment-1" }]),
-          }),
-        }),
+        where: vi.fn().mockReturnValue(makeWhereResult(firstPassRows.length > 0 ? firstPassRows : fallbackRows)),
       };
     }
     return {
-      where: vi.fn().mockResolvedValue(issueRow ? [issueRow] : []),
+      where: vi.fn().mockReturnValue(makeWhereResult(issueRow ? [issueRow] : [])),
     };
   }
 
@@ -58,12 +69,21 @@ function createMockDb(overrides?: {
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockImplementation((values: Record<string, unknown>) => {
         lastInsertValues = values;
-        return {
-          onConflictDoUpdate: vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([{ id: "comment-1" }]),
-          }),
-        };
+        return Promise.resolve([{ id: "comment-1" }]);
       }),
+    }),
+    transaction: vi.fn().mockImplementation(async (fn: (tx: unknown) => Promise<void>) => {
+      const tx = {
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockImplementation((set: Record<string, unknown>) => {
+            lastUpdateSet = set;
+            return {
+              where: vi.fn().mockResolvedValue(undefined),
+            };
+          }),
+        }),
+      };
+      await fn(tx);
     }),
   };
 

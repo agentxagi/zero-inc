@@ -32,6 +32,7 @@ type EmbeddedPostgresCtor = new (opts: {
   password: string;
   port: number;
   persistent: boolean;
+  createPostgresUser?: boolean;
   initdbFlags?: string[];
   onLog?: (message: unknown) => void;
   onError?: (message: unknown) => void;
@@ -72,6 +73,7 @@ async function startTempDatabase() {
     password: "zeroinc",
     port,
     persistent: true,
+    createPostgresUser: true,
     initdbFlags: ["--encoding=UTF8", "--locale=C"],
     onLog: () => {},
     onError: () => {},
@@ -145,7 +147,7 @@ describe("heartbeat orphaned process recovery", () => {
     const runId = randomUUID();
     const wakeupRequestId = randomUUID();
     const issueId = randomUUID();
-    const now = new Date("2026-03-19T00:00:00.000Z");
+    const now = new Date();
     const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 
     await db.insert(companies).values({
@@ -194,7 +196,7 @@ describe("heartbeat orphaned process recovery", () => {
       errorCode: input?.runErrorCode ?? null,
       error: input?.runError ?? null,
       startedAt: now,
-      updatedAt: new Date("2026-03-19T00:00:00.000Z"),
+      updatedAt: now,
     });
 
     if (input?.includeIssue !== false) {

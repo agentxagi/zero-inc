@@ -238,7 +238,7 @@ describe("codex execute", () => {
       expect(logs).toContainEqual(
         expect.objectContaining({
           stream: "stdout",
-          chunk: expect.stringContaining('Injected Codex skill "zeroinc"'),
+          chunk: expect.stringContaining('Injected Codex skill "paperclip"'),
         }),
       );
     } finally {
