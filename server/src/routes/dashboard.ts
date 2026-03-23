@@ -3,6 +3,7 @@ import { and, eq, or, sql } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
 import { agents, issues } from "@zeroinc/db";
 import { dashboardService } from "../services/dashboard.js";
+import { smartAssignerService } from "../services/smart-assigner.js";
 import { assertCompanyAccess } from "./authz.js";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -240,6 +241,34 @@ export function dashboardRoutes(db: Db) {
       setCache(cacheKey, response);
 
       res.json(response);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
+  // POST /api/dashboard/companies/:companyId/smart-assign — trigger smart assignment for a specific issue
+  router.post("/companies/:companyId/smart-assign", async (req, res) => {
+    try {
+      const companyId = req.params.companyId as string;
+      const { issueId } = req.body;
+
+      assertCompanyAccess(req, companyId);
+
+      if (!issueId) {
+        res.status(400).json({ error: "issueId is required" });
+        return;
+      }
+
+      const assigner = smartAssignerService(db);
+      const agentId = await assigner.assignIssue(issueId, companyId);
+
+      if (!agentId) {
+        res.json({ assigned: false, reason: "No eligible agent found" });
+        return;
+      }
+
+      res.json({ assigned: true, agentId });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: errorMessage });

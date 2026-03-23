@@ -52,6 +52,7 @@ import {
 } from "./execution-workspace-policy.js";
 import { staleDetectionService } from "./stale-detection.js";
 import { instanceSettingsService } from "./instance-settings.js";
+import { dashboardService } from "./dashboard.js";
 import { redactCurrentUserText, redactCurrentUserValue } from "../log-redaction.js";
 import {
   hasSessionCompactionThresholds,
@@ -736,6 +737,7 @@ export function heartbeatService(db: Db) {
   const staleDetection = staleDetectionService(db, {
     wakeup: (...args) => enqueueWakeup(...args),
   });
+  const dashboard = dashboardService(db);
   const activeRunExecutions = new Set<string>();
   const budgetHooks = {
     cancelWorkForScope: cancelBudgetScopeWork,
@@ -3046,6 +3048,16 @@ export function heartbeatService(db: Db) {
 
     const agent = await getAgent(agentId);
     if (!agent) throw notFound("Agent not found");
+
+    // Inject dashboard summary for PM agents so they can act proactively
+    if (agent.role === "pm" && !enrichedContextSnapshot.dashboardSummary) {
+      try {
+        const summary = await dashboard.agentSummary(agent.companyId);
+        enrichedContextSnapshot.dashboardSummary = summary;
+      } catch (err) {
+        logger.warn(`[heartbeat] Failed to inject dashboard summary for PM agent ${agentId}: ${err}`);
+      }
+    }
 
     const writeSkippedRequest = async (skipReason: string) => {
       await db.insert(agentWakeupRequests).values({

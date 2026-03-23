@@ -2,6 +2,7 @@ import {
   pgTable,
   uuid,
   text,
+  jsonb,
   boolean,
   integer,
   timestamp,
@@ -31,6 +32,8 @@ export const delegationRules = pgTable(
     triggerOn: text("trigger_on").notNull().default("create"),
     /** Regex pattern to match against issue title */
     titlePattern: text("title_pattern"),
+    /** Label names to match (any-match semantics; null = any) */
+    matchLabels: jsonb("match_labels").$type<string[] | null>(),
     /** Exact priority to match (null = any) */
     matchPriority: text("match_priority"),
     /** Exact status to match (null = any; for escalate rules, the status to watch) */

@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   Settings,
   UserCircle,
+  HandHelping,
+  ShieldAlert,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
@@ -59,6 +61,23 @@ export function Sidebar() {
   });
   const myTaskCount = (myTaskIssues ?? []).filter(
     (i) => !i.assigneeAgentId && i.assigneeUserId,
+  ).length;
+
+  // Count human queue tasks (requires_human label, not done/cancelled)
+  const { data: labels } = useQuery({
+    queryKey: queryKeys.issues.labels(selectedCompanyId!),
+    queryFn: () => issuesApi.listLabels(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+  const requiresHumanLabelId = labels?.find((l) => l.name === "requires_human")?.id;
+  const { data: humanQueueIssues } = useQuery({
+    queryKey: ["human-queue-count", selectedCompanyId, requiresHumanLabelId],
+    queryFn: () => issuesApi.list(selectedCompanyId!, { labelId: requiresHumanLabelId }),
+    enabled: !!selectedCompanyId && !!requiresHumanLabelId,
+    refetchInterval: 30_000,
+  });
+  const humanQueueCount = (humanQueueIssues ?? []).filter(
+    (i) => i.status !== "done" && i.status !== "cancelled",
   ).length;
 
   function openSearch() {
@@ -133,6 +152,14 @@ export function Sidebar() {
           <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />
           <SidebarNavItem to="/routines" label="Routines" icon={Repeat} textBadge="Beta" textBadgeTone="amber" />
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
+          <SidebarNavItem
+            to="/human-queue"
+            label="Human Queue"
+            icon={HandHelping}
+            badge={humanQueueCount > 0 ? humanQueueCount : undefined}
+            badgeTone="danger"
+            alert={humanQueueCount > 0}
+          />
         </SidebarSection>
 
         <SidebarProjects />
@@ -145,6 +172,7 @@ export function Sidebar() {
           <SidebarNavItem to="/skills" label="Skills" icon={Boxes} />
           <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
           <SidebarNavItem to="/activity" label="Activity" icon={History} />
+          <SidebarNavItem to="/task-audit" label="Task Audit" icon={ShieldAlert} />
           <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
         </SidebarSection>
 

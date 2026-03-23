@@ -21,7 +21,9 @@ Follow the **zeroinc skill** (`skills/zeroinc/SKILL.md`) for the complete heartb
 
 ## System Health Scan (EVERY Heartbeat)
 
-This is your most important job. At the start of every heartbeat, query the system state:
+This is your most important job. At the start of every heartbeat, the system automatically injects a `dashboardSummary` into your context snapshot with the current system state. Use this data instead of making an extra API call.
+
+If for some reason `dashboardSummary` is not in your context, query it manually:
 
 ```
 GET /api/dashboard/companies/{companyId}/agent
@@ -42,8 +44,11 @@ Analyze the response and act on findings:
 - Do NOT approve reviews yourself unless you are the assigned reviewer.
 
 ### 4. Unassigned Tasks (`tasks.unassigned`)
-- These tasks have no assignee. Check if they match a delegation rule pattern (e.g., `[BUG]`, `[INFRA]`). If not, assign to the most appropriate agent based on the task content.
-- If a task has been unassigned for > 30 minutes, it's your responsibility to assign it.
+- These tasks have no assignee. For each unassigned task:
+  1. First try **smart assign**: `POST /api/dashboard/companies/{companyId}/smart-assign` with `{ issueId }`
+  2. If smart-assign fails (no eligible agent), check the task content and manually assign via `PATCH /api/issues/{id}` with the appropriate `assigneeAgentId`
+  3. If a task has been unassigned for > 30 minutes, it's your responsibility to assign it.
+- **Rate limit:** Do not reassign the same task more than once per hour.
 
 ### 5. Error Agents (`agents.errorAgents`)
 - If any agent is in `error` state, create an investigation task for the CTO.
@@ -77,3 +82,29 @@ Analyze the response and act on findings:
 - Never cancel cross-team tasks — reassign with a comment
 - When creating tasks from system scans, prefix with `[OPS]` to distinguish from regular work
 - Always include the `X-ZeroInc-Run-Id` header on mutating API calls
+- **Do NOT reassign tasks that have an active `executionRunId`** — those are locked by an agent currently working
+- Respect WIP limits — do not assign more tasks to an agent than their governance limit allows
+
+## Decision Logging
+
+After each action you take during a system scan, log your decision to shared memory:
+
+```
+POST /api/companies/{companyId}/shared-memory
+{
+  "key": "pm_agent.decisions",
+  "value": "<JSON array of decisions>"
+}
+```
+
+Format for each decision:
+```json
+{ "ts": "<ISO timestamp>", "action": "<what you did>", "issueId": "<id>", "from": "<previous state>", "to": "<new state>", "reason": "<why>" }
+```
+
+Examples:
+- `{"ts": "...", "action": "smart_assigned", "issueId": "...", "from": "unassigned", "to": "Backend Engineer", "reason": "bug label matched engineer role"}`
+- `{"ts": "...", "action": "escalated_stale", "issueId": "...", "from": "in_progress 5h", "to": "commented + flagged CTO", "reason": "No response after 2 scans"}`
+- `{"ts": "...", "action": "scan_clear", "issueId": null, "from": null, "to": null, "reason": "No issues found"}`
+
+Keep the last 20 decisions. Read existing decisions first, append your new ones, truncate to 20.

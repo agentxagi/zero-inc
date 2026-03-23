@@ -13,6 +13,8 @@ export interface RuleMatchContext {
   status: string;
   statusChangedAt?: Date | null;
   previousStatus?: string;
+  /** Label names on the issue (for label-based matching) */
+  labelNames?: string[];
 }
 
 export interface RuleAction {
@@ -53,15 +55,32 @@ export function delegationRulesService(db: Db) {
   }
 
   function matchRule(rule: typeof delegationRules.$inferSelect, ctx: RuleMatchContext): RuleAction | null {
-    // Title pattern match (regex)
-    if (rule.titlePattern) {
-      try {
-        const re = new RegExp(rule.titlePattern, "i");
-        if (!re.test(ctx.title)) return null;
-      } catch {
-        logger.warn(`[delegation] Invalid regex in rule "${rule.name}": ${rule.titlePattern}`);
-        return null;
+    // Title pattern match (regex) and/or label match
+    const hasTitlePattern = !!rule.titlePattern;
+    const hasMatchLabels = Array.isArray(rule.matchLabels) && rule.matchLabels.length > 0;
+
+    if (hasTitlePattern || hasMatchLabels) {
+      let titleMatch = !hasTitlePattern; // true if no title pattern to check
+      let labelMatch = !hasMatchLabels; // true if no label match to check
+
+      if (hasTitlePattern) {
+        try {
+          const re = new RegExp(rule.titlePattern!, "i");
+          titleMatch = re.test(ctx.title);
+        } catch {
+          logger.warn(`[delegation] Invalid regex in rule "${rule.name}": ${rule.titlePattern}`);
+          return null;
+        }
       }
+
+      if (hasMatchLabels) {
+        const issueLabels = (ctx.labelNames ?? []).map((n) => n.toLowerCase());
+        labelMatch = rule.matchLabels!.some((rl) => issueLabels.includes((rl as string).toLowerCase()));
+      }
+
+      // If both are set, require AND (more specific rule). If only one is set, that one must match.
+      if (hasTitlePattern && !titleMatch) return null;
+      if (hasMatchLabels && !labelMatch) return null;
     }
 
     // Priority match
@@ -137,6 +156,7 @@ export function delegationRulesService(db: Db) {
     ruleType: string;
     triggerOn?: string;
     titlePattern?: string | null;
+    matchLabels?: string[] | null;
     matchPriority?: string | null;
     matchStatus?: string | null;
     assignToAgentId?: string | null;
@@ -173,6 +193,7 @@ export function delegationRulesService(db: Db) {
         ruleType: data.ruleType,
         triggerOn,
         titlePattern: data.titlePattern ?? null,
+        matchLabels: data.matchLabels ?? null,
         matchPriority: data.matchPriority ?? null,
         matchStatus: data.matchStatus ?? null,
         assignToAgentId: data.assignToAgentId ?? null,
@@ -194,6 +215,7 @@ export function delegationRulesService(db: Db) {
     ruleType?: string;
     triggerOn?: string;
     titlePattern?: string | null;
+    matchLabels?: string[] | null;
     matchPriority?: string | null;
     matchStatus?: string | null;
     assignToAgentId?: string | null;

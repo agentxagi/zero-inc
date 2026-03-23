@@ -55,3 +55,4 @@ export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
 export { delegationRules } from "./delegation_rules.js";
 export { sprints } from "./sprints.js";
+export { agentMemory, sharedMemory, memoryOperations } from "./memory.js";

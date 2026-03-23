@@ -31,6 +31,7 @@ import {
   projectService,
   routineService,
   workProductService,
+  taskAuditService,
 } from "../services/index.js";
 import { governanceSettingsService } from "../services/governance-settings.js";
 import { logger } from "../middleware/logger.js";
@@ -807,6 +808,17 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, existing.companyId);
+
+    // Block agents from marking requires_human issues as done
+    if (
+      req.body.status === "done" &&
+      req.actor.type === "agent" &&
+      (existing as any).labels?.some((l: any) => l.name.toLowerCase() === "requires_human")
+    ) {
+      res.status(403).json({ error: "Agents cannot mark human-only tasks as done. A human must verify and close this task." });
+      return;
+    }
+
     const assigneeWillChange =
       (req.body.assigneeAgentId !== undefined && req.body.assigneeAgentId !== existing.assigneeAgentId) ||
       (req.body.assigneeUserId !== undefined && req.body.assigneeUserId !== existing.assigneeUserId);
@@ -1610,6 +1622,65 @@ export function issueRoutes(db: Db, storage: StorageService) {
     });
 
     res.json({ ok: true });
+  });
+
+  // --- Task Audit ---
+
+  // POST /api/companies/:companyId/issues/audit — run audit on unreviewed done tasks
+  router.post("/companies/:companyId/issues/audit", async (req, res) => {
+    try {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const audit = taskAuditService(db);
+      const result = await audit.runAudit(companyId);
+      res.json(result);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // POST /api/companies/:companyId/issues/:id/flag — flag an issue for audit
+  router.post("/companies/:companyId/issues/:id/flag", async (req, res) => {
+    try {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const issue = await svc.getById(req.params.id as string);
+      if (!issue) {
+        res.status(404).json({ error: "Issue not found" });
+        return;
+      }
+
+      const audit = taskAuditService(db);
+      const flagged = await audit.flagIssue(issue.id, issue.companyId);
+      res.json({ flagged });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // POST /api/companies/:companyId/issues/:id/unflag — dismiss audit flag
+  router.post("/companies/:companyId/issues/:id/unflag", async (req, res) => {
+    try {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const issue = await svc.getById(req.params.id as string);
+      if (!issue) {
+        res.status(404).json({ error: "Issue not found" });
+        return;
+      }
+
+      const audit = taskAuditService(db);
+      const unflagged = await audit.unflagIssue(issue.id, issue.companyId);
+      res.json({ unflagged });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: msg });
+    }
   });
 
   return router;

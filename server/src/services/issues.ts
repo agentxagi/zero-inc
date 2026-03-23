@@ -20,6 +20,7 @@ import {
   projects,
 } from "@zeroinc/db";
 import { delegationRulesService, type RuleAction } from "./delegation-rules.js";
+import { smartAssignerService } from "./smart-assigner.js";
 import { extractProjectMentionIds } from "@zeroinc/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import {
@@ -34,6 +35,7 @@ import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallbac
 import { getDefaultCompanyGoal } from "./goals.js";
 import { qualityGateService } from "./quality-gate.js";
 import { reviewPipelineService, type ReviewPipelineWakeupDeps } from "./review-pipeline.js";
+import { humanNotificationService } from "./human-notification.js";
 
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
@@ -322,6 +324,71 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
   const qualityGate = qualityGateService(db);
   const reviewPipeline = reviewPipelineService(db, wakeupDeps);
   const delegationEngine = delegationRulesService(db);
+  const smartAssigner = smartAssignerService(db);
+  const humanNotification = humanNotificationService(db);
+
+  const BOARD_USER_ID = "local-board";
+
+  /**
+   * Handle requires_human label: auto-assign to board user, clear agent assignee.
+   * Uses conditional UPDATE to avoid race with delegation rules.
+   * Runs asynchronously — does not block the caller.
+   */
+  async function handleRequiresHumanLabel(
+    issueId: string,
+    companyId: string,
+    labelNames: string[],
+    issueData?: { identifier?: string | null; title?: string; description?: string | null; priority?: string; createdByAgentId?: string | null },
+  ) {
+    try {
+      const hasRequiresHuman = labelNames.some((n) => n.toLowerCase() === "requires_human");
+      if (!hasRequiresHuman) return;
+
+      // Wait briefly for delegation rules to settle
+      await new Promise((r) => setTimeout(r, 500));
+
+      // Check current state — only act if still has requires_human label
+      const current = await db
+        .select({ assigneeUserId: issues.assigneeUserId, assigneeAgentId: issues.assigneeAgentId })
+        .from(issues)
+        .where(eq(issues.id, issueId))
+        .then((rows) => rows[0] ?? null);
+
+      if (!current) return;
+
+      if (current.assigneeUserId !== BOARD_USER_ID) {
+        await db.update(issues).set({
+          assigneeUserId: BOARD_USER_ID,
+          assigneeAgentId: null,
+          updatedAt: new Date(),
+        }).where(eq(issues.id, issueId));
+
+        await db.insert(issueComments).values({
+          companyId,
+          issueId,
+          body: "## Human Task\n\nThis task requires human action and has been automatically assigned to the board.",
+        });
+
+        logger.info(`[requires-human] Auto-assigned issue ${issueId} to board user`);
+      }
+
+      // Send webhook notification
+      if (issueData) {
+        void humanNotification.notifyHumanTask({
+          companyId,
+          issueId,
+          identifier: issueData.identifier ?? "",
+          title: issueData.title ?? "",
+          description: issueData.description ?? null,
+          priority: issueData.priority ?? "medium",
+          labelNames,
+          createdByAgent: issueData.createdByAgentId ?? null,
+        });
+      }
+    } catch (err) {
+      logger.warn(`[requires-human] Failed to handle label for issue ${issueId}: ${err}`);
+    }
+  }
 
   /**
    * Apply delegation rule actions to an issue after creation or status change.
@@ -331,11 +398,26 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
     issueId: string,
     companyId: string,
     trigger: "create" | "status_change",
-    ctx: { title: string; priority: string; status: string; statusChangedAt?: Date | null; previousStatus?: string },
+    ctx: { title: string; priority: string; status: string; statusChangedAt?: Date | null; previousStatus?: string; labelNames?: string[] },
   ) {
     try {
       const action = await delegationEngine.evaluate(companyId, trigger, ctx);
-      if (!action) return;
+      if (!action) {
+        // Fallback: smart assigner for create trigger only
+        if (trigger === "create" && ctx.status === "todo") {
+          const assignedAgentId = await smartAssigner.assignIssue(issueId, companyId);
+          if (assignedAgentId) {
+            // Wake the assigned agent
+            if (wakeupDeps?.wakeup) {
+              wakeupDeps.wakeup(assignedAgentId, {
+                source: "automation",
+                triggerDetail: "system",
+              });
+            }
+          }
+        }
+        return;
+      }
 
       const patch: Partial<typeof issues.$inferInsert> = { updatedAt: new Date() };
       if (action.assigneeAgentId !== undefined) patch.assigneeAgentId = action.assigneeAgentId;
@@ -845,7 +927,16 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
         title: result.title,
         priority: result.priority,
         status: result.status,
+        labelNames: (result as any).labels?.map((l: any) => l.name) ?? [],
       });
+
+      // Handle requires_human label (non-blocking)
+      void handleRequiresHumanLabel(
+        result.id,
+        companyId,
+        (result as any).labels?.map((l: any) => l.name) ?? [],
+        { identifier: result.identifier, title: result.title, description: result.description, priority: result.priority },
+      );
 
       return result;
     },
@@ -1027,6 +1118,17 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
           statusChangedAt: result.updatedAt,
           previousStatus: existing.status,
         });
+      }
+
+      // Handle requires_human label on label change (non-blocking)
+      if (result && nextLabelIds !== undefined) {
+        const nextLabels = (result as any).labels?.map((l: any) => l.name) ?? [];
+        void handleRequiresHumanLabel(
+          result.id,
+          existing.companyId,
+          nextLabels,
+          { identifier: result.identifier, title: result.title, description: result.description, priority: result.priority },
+        );
       }
 
       return result;

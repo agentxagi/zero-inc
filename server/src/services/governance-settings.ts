@@ -21,11 +21,11 @@ export interface AgentGovernanceSettings {
 }
 
 export const DEFAULT_GOVERNANCE_SETTINGS: GovernanceSettings = {
-  wipLimitDefault: 5,
-  staleInProgressWarnMinutes: 240,
-  staleInProgressBlockMinutes: 1440,
-  staleBlockedEscalateMinutes: 240,
-  staleInReviewPingMinutes: 120,
+  wipLimitDefault: 3,
+  staleInProgressWarnMinutes: 120,
+  staleInProgressBlockMinutes: 480,
+  staleBlockedEscalateMinutes: 120,
+  staleInReviewPingMinutes: 60,
   staleDoneNoQualityMinutes: 60,
 };
 

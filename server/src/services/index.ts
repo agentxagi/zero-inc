@@ -34,3 +34,4 @@ export { createStorageServiceFromConfig, getStorageService } from "../storage/in
 export { generateAgentProfile, AgentProfileGeneratorError } from "./agent-profile-generator.js";
 export { delegationRulesService } from "./delegation-rules.js";
 export { sprintService } from "./sprints.js";
+export { taskAuditService } from "./task-audit.js";
