@@ -69,10 +69,10 @@ export function AuthPage() {
   }
 
   return (
-    <div className="fixed inset-0 flex bg-background">
+    <div className="fixed inset-0 flex bg-background md:h-screen md:static">
       {/* Left half — form */}
-      <div className="w-full md:w-1/2 flex flex-col overflow-y-auto">
-        <div className="w-full max-w-md mx-auto my-auto px-8 py-12">
+      <div className="w-full md:w-1/2 flex flex-col min-h-dvh md:min-h-0 overflow-y-auto">
+        <div className="w-full max-w-md mx-auto px-8 py-12 md:my-auto">
           <div className="flex items-center gap-2 mb-8">
             <Sparkles className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">ZeroInc</span>
