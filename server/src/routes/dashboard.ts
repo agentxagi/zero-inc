@@ -275,5 +275,51 @@ export function dashboardRoutes(db: Db) {
     }
   });
 
+  // POST /api/dashboard/companies/:companyId/smart-assign/bulk — auto-assign all unassigned todo tasks
+  router.post("/companies/:companyId/smart-assign/bulk", async (req, res) => {
+    try {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      // Find all unassigned todo issues (no agent and no user assignee)
+      const unassigned = await db
+        .select({ id: issues.id, identifier: issues.identifier, title: issues.title })
+        .from(issues)
+        .where(
+          and(
+            eq(issues.companyId, companyId),
+            eq(issues.status, "todo"),
+            sql`${issues.assigneeAgentId} IS NULL`,
+            sql`${issues.assigneeUserId} IS NULL`,
+          )
+        )
+        .limit(50);
+
+      if (unassigned.length === 0) {
+        res.json({ assigned: 0, results: [], message: "No unassigned tasks found" });
+        return;
+      }
+
+      const assigner = smartAssignerService(db);
+      const results: Array<{ identifier: string; title: string; assigned: boolean; agentId?: string; reason?: string }> = [];
+      let assignedCount = 0;
+
+      for (const issue of unassigned) {
+        const agentId = await assigner.assignIssue(issue.id, companyId);
+        if (agentId) {
+          assignedCount++;
+          results.push({ identifier: issue.identifier, title: issue.title, assigned: true, agentId });
+        } else {
+          results.push({ identifier: issue.identifier, title: issue.title, assigned: false, reason: "No eligible agent found" });
+        }
+      }
+
+      res.json({ assigned: assignedCount, total: unassigned.length, results });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
   return router;
 }

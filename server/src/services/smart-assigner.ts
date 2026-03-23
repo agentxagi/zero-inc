@@ -85,6 +85,32 @@ export function smartAssignerService(db: Db) {
       });
     }
 
+    // Fallback: if no label-based candidates found, try any active agent with auto-assign
+    // (ignoring role match but still requiring quality >= 40)
+    if (candidates.length === 0 && targetRoles.size > 0) {
+      for (const row of agentRows) {
+        if (row.status !== "active") continue;
+        if (opts.excludeAgentIds?.includes(row.id)) continue;
+        if (!row.qualityAutoAssign) continue;
+        if ((row.qualityScore ?? 0) < 40) continue;
+        // Skip agents that already failed the role filter above
+        if (targetRoles.has(row.role ?? "")) continue;
+
+        const inProgressCount = await govSvc.countInProgressForAgent(row.id);
+        const wipLimit = await govSvc.getWipLimitForAgent(row.id);
+        if (inProgressCount >= wipLimit) continue;
+
+        candidates.push({
+          id: row.id,
+          name: row.name,
+          role: row.role ?? "",
+          qualityScore: row.qualityScore,
+          qualityAutoAssign: row.qualityAutoAssign,
+          inProgressCount,
+        });
+      }
+    }
+
     if (candidates.length === 0) return null;
 
     // Sort: highest quality first, then lowest workload
