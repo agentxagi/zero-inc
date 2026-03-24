@@ -6,6 +6,7 @@ import {
   prioritizeProjectWorkspaceCandidatesForRun,
   parseSessionCompactionPolicy,
   resolveRuntimeSessionParamsForWorkspace,
+  shouldSkipTerminalIssueWake,
   shouldSkipStaleIssueAssignedWake,
   shouldResetTaskSessionForWake,
   type ResolvedWorkspaceForRun,
@@ -239,6 +240,48 @@ describe("shouldSkipStaleIssueAssignedWake", () => {
         agentId: "agent-1",
       }),
     ).toBe(true);
+  });
+});
+
+describe("shouldSkipTerminalIssueWake", () => {
+  it("skips non-manual wakes when issue is done", () => {
+    expect(
+      shouldSkipTerminalIssueWake({
+        invocationSource: "timer",
+        issueId: "issue-1",
+        issueStatus: "done",
+      }),
+    ).toBe(true);
+  });
+
+  it("skips non-manual wakes when issue is cancelled", () => {
+    expect(
+      shouldSkipTerminalIssueWake({
+        invocationSource: "automation",
+        issueId: "issue-1",
+        issueStatus: "cancelled",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not skip manual on-demand wakes on terminal issues", () => {
+    expect(
+      shouldSkipTerminalIssueWake({
+        invocationSource: "on_demand",
+        issueId: "issue-1",
+        issueStatus: "done",
+      }),
+    ).toBe(false);
+  });
+
+  it("does not skip active issues", () => {
+    expect(
+      shouldSkipTerminalIssueWake({
+        invocationSource: "timer",
+        issueId: "issue-1",
+        issueStatus: "in_progress",
+      }),
+    ).toBe(false);
   });
 });
 

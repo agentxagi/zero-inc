@@ -656,6 +656,19 @@ export function shouldSkipStaleIssueAssignedWake(input: {
   return input.issueAssigneeAgentId !== input.agentId;
 }
 
+export function shouldSkipTerminalIssueWake(input: {
+  invocationSource: string | null | undefined;
+  issueId: string | null;
+  issueStatus: string | null | undefined;
+}): boolean {
+  if (!input.issueId) return false;
+  const invocationSource = (input.invocationSource ?? "").trim().toLowerCase();
+  // Keep explicit manual wakes available for operators, even on terminal issues.
+  if (invocationSource === "on_demand") return false;
+  const issueStatus = (input.issueStatus ?? "").trim().toLowerCase();
+  return issueStatus === "done" || issueStatus === "cancelled";
+}
+
 function describeSessionResetReason(
   contextSnapshot: Record<string, unknown> | null | undefined,
 ) {
@@ -2375,6 +2388,7 @@ export function heartbeatService(db: Db) {
             id: issues.id,
             identifier: issues.identifier,
             title: issues.title,
+            status: issues.status,
             projectId: issues.projectId,
             projectWorkspaceId: issues.projectWorkspaceId,
             executionWorkspaceId: issues.executionWorkspaceId,
@@ -2389,6 +2403,47 @@ export function heartbeatService(db: Db) {
           .then((rows) => rows[0] ?? null)
       : null;
     const wakeReason = readNonEmptyString(context.wakeReason);
+    if (
+      shouldSkipTerminalIssueWake({
+        invocationSource: run.invocationSource,
+        issueId,
+        issueStatus: issueContext?.status,
+      })
+    ) {
+      const terminalReason = `Skipped wake: issue ${issueContext?.identifier ?? issueId} is ${issueContext?.status ?? "terminal"}`;
+      const now = new Date();
+      const skippedRun = await setRunStatus(run.id, "cancelled", {
+        finishedAt: now,
+        error: terminalReason,
+        errorCode: "terminal_issue_skip",
+        resultJson: {
+          subtype: "skipped",
+          reason: "terminal_issue",
+          message: terminalReason,
+        },
+      });
+      await setWakeupStatus(run.wakeupRequestId, "cancelled", {
+        finishedAt: now,
+        error: terminalReason,
+      });
+      if (skippedRun) {
+        await appendRunEvent(skippedRun, await nextRunEventSeq(skippedRun.id), {
+          eventType: "lifecycle",
+          stream: "system",
+          level: "info",
+          message: terminalReason,
+          payload: {
+            issueId,
+            wakeReason: wakeReason ?? null,
+            issueStatus: issueContext?.status ?? null,
+            runAgentId: agent.id,
+          },
+        });
+        await releaseIssueExecutionAndPromote(skippedRun);
+      }
+      await finalizeAgentStatus(agent.id, "cancelled");
+      return;
+    }
     if (
       shouldSkipStaleIssueAssignedWake({
         invocationSource: run.invocationSource,
@@ -2474,17 +2529,26 @@ export function heartbeatService(db: Db) {
       legacyUseProjectWorkspace: issueAssigneeOverrides?.useProjectWorkspace ?? null,
       preferIsolatedWorkspace: isolatedWorkspacesEnabled && shouldPreferIsolatedWorkspaceForAgent(agent),
     });
+    const rolePrefersIsolatedWorkspace = shouldPreferIsolatedWorkspaceForAgent(agent);
+    let executionWorkspaceModeForRole = executionWorkspaceMode;
+    if (executionWorkspaceModeForRole === "isolated_workspace" && !rolePrefersIsolatedWorkspace) {
+      executionWorkspaceModeForRole = "shared_workspace";
+    }
     const resolvedWorkspace = await resolveWorkspaceForRun(
       agent,
       context,
       previousSessionParams,
-      { useProjectWorkspace: executionWorkspaceMode !== "agent_default" },
+      { useProjectWorkspace: executionWorkspaceModeForRole !== "agent_default" },
     );
-    let executionWorkspaceModeForRun = executionWorkspaceMode;
-    if (executionWorkspaceMode === "isolated_workspace" && !(await isGitRepository(resolvedWorkspace.cwd))) {
+    let executionWorkspaceModeForRun = executionWorkspaceModeForRole;
+    if (executionWorkspaceModeForRole === "isolated_workspace" && !(await isGitRepository(resolvedWorkspace.cwd))) {
       executionWorkspaceModeForRun = "shared_workspace";
       resolvedWorkspace.warnings.push(
         `Workspace "${resolvedWorkspace.cwd}" is not a Git repository. Falling back to shared workspace mode for this run.`,
+      );
+    } else if (executionWorkspaceMode !== executionWorkspaceModeForRole) {
+      resolvedWorkspace.warnings.push(
+        `Agent role "${agent.role ?? "unknown"}" uses shared workspace by default. Falling back from isolated workspace mode for this run.`,
       );
     }
     const workspaceManagedConfig = buildExecutionWorkspaceAdapterConfig({
@@ -4507,18 +4571,22 @@ export function heartbeatService(db: Db) {
             and(
               eq(issues.companyId, agent.companyId),
               or(
-                eq(issues.assigneeAgentId, agent.id),
-                eq(issues.reviewerAgentId, agent.id),
+                and(
+                  eq(issues.assigneeAgentId, agent.id),
+                  inArray(issues.status, ["todo", "in_progress"]),
+                ),
+                and(
+                  eq(issues.reviewerAgentId, agent.id),
+                  eq(issues.status, "in_review"),
+                ),
               ),
-              inArray(issues.status, ["todo", "in_progress", "blocked", "in_review"]),
             ),
           )
           .orderBy(
             sql`case
               when ${issues.status} = 'in_progress' then 0
-              when ${issues.status} = 'blocked' then 1
-              when ${issues.status} = 'in_review' then 2
-              when ${issues.status} = 'todo' then 3
+              when ${issues.status} = 'in_review' then 1
+              when ${issues.status} = 'todo' then 2
               else 4
             end`,
             asc(issues.updatedAt),
