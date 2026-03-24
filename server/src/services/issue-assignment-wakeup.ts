@@ -26,12 +26,32 @@ export function queueIssueAssignmentWakeup(input: {
   contextSource: string;
   requestedByActorType?: "user" | "agent" | "system";
   requestedByActorId?: string | null;
+  resolveCurrentIssue?: (
+    issueId: string,
+  ) => Promise<{ assigneeAgentId: string | null; status: string } | null>;
   rethrowOnError?: boolean;
 }) {
-  if (!input.issue.assigneeAgentId || input.issue.status === "backlog") return;
-
-  return input.heartbeat
-    .wakeup(input.issue.assigneeAgentId, {
+  const enqueue = async () => {
+    let assigneeAgentId = input.issue.assigneeAgentId;
+    let issueStatus = input.issue.status;
+    if (input.resolveCurrentIssue) {
+      const latest = await input.resolveCurrentIssue(input.issue.id);
+      if (!latest) return null;
+      assigneeAgentId = latest.assigneeAgentId;
+      issueStatus = latest.status;
+      if (assigneeAgentId !== input.issue.assigneeAgentId) {
+        logger.info(
+          {
+            issueId: input.issue.id,
+            previousAssigneeAgentId: input.issue.assigneeAgentId,
+            currentAssigneeAgentId: assigneeAgentId,
+          },
+          "issue assignment changed before wakeup enqueue; using latest assignee",
+        );
+      }
+    }
+    if (!assigneeAgentId || issueStatus === "backlog") return null;
+    return input.heartbeat.wakeup(assigneeAgentId, {
       source: "assignment",
       triggerDetail: "system",
       reason: input.reason,
@@ -39,7 +59,10 @@ export function queueIssueAssignmentWakeup(input: {
       requestedByActorType: input.requestedByActorType,
       requestedByActorId: input.requestedByActorId ?? null,
       contextSnapshot: { issueId: input.issue.id, source: input.contextSource },
-    })
+    });
+  };
+
+  return enqueue()
     .catch((err) => {
       logger.warn({ err, issueId: input.issue.id }, "failed to wake assignee on issue assignment");
       if (input.rethrowOnError) throw err;

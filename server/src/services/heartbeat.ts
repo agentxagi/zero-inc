@@ -640,6 +640,22 @@ export function formatRuntimeWorkspaceWarningLog(warning: string) {
   };
 }
 
+export function shouldSkipStaleIssueAssignedWake(input: {
+  invocationSource: string | null | undefined;
+  wakeReason: string | null | undefined;
+  issueId: string | null;
+  issueAssigneeAgentId: string | null | undefined;
+  agentId: string;
+}): boolean {
+  if (input.invocationSource !== "assignment") return false;
+  if (!input.issueId) return false;
+  const wakeReason = (input.wakeReason ?? "").trim().toLowerCase();
+  // Allow non-assignment assignment-source wakes (e.g. review_assigned) to continue.
+  if (wakeReason && wakeReason !== "issue_assigned") return false;
+  if (!input.issueAssigneeAgentId) return true;
+  return input.issueAssigneeAgentId !== input.agentId;
+}
+
 function describeSessionResetReason(
   contextSnapshot: Record<string, unknown> | null | undefined,
 ) {
@@ -2364,6 +2380,7 @@ export function heartbeatService(db: Db) {
             executionWorkspaceId: issues.executionWorkspaceId,
             executionWorkspacePreference: issues.executionWorkspacePreference,
             assigneeAgentId: issues.assigneeAgentId,
+            reviewerAgentId: issues.reviewerAgentId,
             assigneeAdapterOverrides: issues.assigneeAdapterOverrides,
             executionWorkspaceSettings: issues.executionWorkspaceSettings,
           })
@@ -2371,6 +2388,53 @@ export function heartbeatService(db: Db) {
           .where(and(eq(issues.id, issueId), eq(issues.companyId, agent.companyId)))
           .then((rows) => rows[0] ?? null)
       : null;
+    const wakeReason = readNonEmptyString(context.wakeReason);
+    if (
+      shouldSkipStaleIssueAssignedWake({
+        invocationSource: run.invocationSource,
+        wakeReason,
+        issueId,
+        issueAssigneeAgentId: issueContext?.assigneeAgentId ?? null,
+        agentId: agent.id,
+      })
+    ) {
+      const staleReason =
+        issueContext?.assigneeAgentId
+          ? `Skipped stale assignment wake: issue ${issueContext.identifier ?? issueContext.id} is assigned to another agent`
+          : `Skipped stale assignment wake: issue ${issueId} is no longer assigned`;
+      const now = new Date();
+      const skippedRun = await setRunStatus(run.id, "cancelled", {
+        finishedAt: now,
+        error: staleReason,
+        errorCode: "stale_assignment_skip",
+        resultJson: {
+          subtype: "skipped",
+          reason: "stale_assignment",
+          message: staleReason,
+        },
+      });
+      await setWakeupStatus(run.wakeupRequestId, "cancelled", {
+        finishedAt: now,
+        error: staleReason,
+      });
+      if (skippedRun) {
+        await appendRunEvent(skippedRun, await nextRunEventSeq(skippedRun.id), {
+          eventType: "lifecycle",
+          stream: "system",
+          level: "info",
+          message: staleReason,
+          payload: {
+            issueId,
+            wakeReason: wakeReason ?? null,
+            expectedAgentId: issueContext?.assigneeAgentId ?? null,
+            runAgentId: agent.id,
+          },
+        });
+        await releaseIssueExecutionAndPromote(skippedRun);
+      }
+      await finalizeAgentStatus(agent.id, "cancelled");
+      return;
+    }
     const issueAssigneeOverrides =
       issueContext && issueContext.assigneeAgentId === agent.id
         ? parseIssueAssigneeAdapterOverrides(

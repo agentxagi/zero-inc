@@ -6,6 +6,7 @@ import {
   prioritizeProjectWorkspaceCandidatesForRun,
   parseSessionCompactionPolicy,
   resolveRuntimeSessionParamsForWorkspace,
+  shouldSkipStaleIssueAssignedWake,
   shouldResetTaskSessionForWake,
   type ResolvedWorkspaceForRun,
 } from "../services/heartbeat.ts";
@@ -188,6 +189,56 @@ describe("formatRuntimeWorkspaceWarningLog", () => {
       stream: "stdout",
       chunk: "[zeroinc] Using fallback workspace\n",
     });
+  });
+});
+
+describe("shouldSkipStaleIssueAssignedWake", () => {
+  it("skips assignment wakes when issue assignee no longer matches run agent", () => {
+    expect(
+      shouldSkipStaleIssueAssignedWake({
+        invocationSource: "assignment",
+        wakeReason: "issue_assigned",
+        issueId: "issue-1",
+        issueAssigneeAgentId: "agent-2",
+        agentId: "agent-1",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not skip when assignee still matches run agent", () => {
+    expect(
+      shouldSkipStaleIssueAssignedWake({
+        invocationSource: "assignment",
+        wakeReason: "issue_assigned",
+        issueId: "issue-1",
+        issueAssigneeAgentId: "agent-1",
+        agentId: "agent-1",
+      }),
+    ).toBe(false);
+  });
+
+  it("does not skip assignment-source wakes with non-assignment reasons", () => {
+    expect(
+      shouldSkipStaleIssueAssignedWake({
+        invocationSource: "assignment",
+        wakeReason: "review_assigned",
+        issueId: "issue-1",
+        issueAssigneeAgentId: "agent-2",
+        agentId: "agent-1",
+      }),
+    ).toBe(false);
+  });
+
+  it("skips assignment wake when issue became unassigned", () => {
+    expect(
+      shouldSkipStaleIssueAssignedWake({
+        invocationSource: "assignment",
+        wakeReason: "issue_assigned",
+        issueId: "issue-1",
+        issueAssigneeAgentId: null,
+        agentId: "agent-1",
+      }),
+    ).toBe(true);
   });
 });
 

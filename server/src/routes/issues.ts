@@ -795,6 +795,14 @@ export function issueRoutes(db: Db, storage: StorageService) {
       contextSource: "issue.create",
       requestedByActorType: actor.actorType,
       requestedByActorId: actor.actorId,
+      resolveCurrentIssue: async (issueId) => {
+        const latest = await svc.getById(issueId);
+        if (!latest) return null;
+        return {
+          assigneeAgentId: latest.assigneeAgentId ?? null,
+          status: latest.status,
+        };
+      },
     });
 
     res.status(201).json(issue);

@@ -436,6 +436,19 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
           body: `## Delegation Rule\n\n${action.commentBody}`,
         });
       }
+
+      // Ensure delegated assignees are woken promptly so reassignment creates real progress.
+      if (hasUpdate && action.assigneeAgentId && wakeupDeps?.wakeup) {
+        void wakeupDeps.wakeup(action.assigneeAgentId, {
+          source: "automation",
+          triggerDetail: "system",
+          reason: "issue_assigned",
+          payload: { issueId, mutation: "delegation_rule" },
+          contextSnapshot: { issueId, source: "delegation.rule" },
+        }).catch((err) => {
+          logger.warn({ err, issueId, assigneeAgentId: action.assigneeAgentId }, "failed to wake delegated assignee");
+        });
+      }
     } catch (err) {
       // Log but don't fail the parent operation
       logger.warn(`[delegation] Failed to apply rules for issue ${issueId}: ${err}`);
