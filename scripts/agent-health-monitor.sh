@@ -24,6 +24,7 @@ SPEED_KILL_SEC=30              # Assignment run done suspiciously fast
 
 # Escalation
 MAX_CONSECUTIVE_FAILURES=3
+LOCK_FILE="/tmp/paperclip-agent-health-monitor.lock"
 
 # --- Flags ---
 VERBOSE=false
@@ -41,6 +42,13 @@ done
 # --- Setup ---
 mkdir -p "$LOG_DIR"
 if [ ! -s "$STATE_FILE" ]; then echo '{}' > "$STATE_FILE"; fi
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  if $VERBOSE; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [INFO] another agent-health-monitor run is active; exiting"
+  fi
+  exit 0
+fi
 
 now_utc() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 epoch_now() { date +%s; }
@@ -282,7 +290,12 @@ log INFO "---"
 
 # Rotate log: keep last 5000 lines
 if [ -f "$LOG_FILE" ] && ! $VERBOSE; then
-  tail -5000 "$LOG_FILE" > "${LOG_FILE}.tmp" 2>/dev/null && mv "${LOG_FILE}.tmp" "$LOG_FILE"
+  tmp_log=$(mktemp "${LOG_FILE}.XXXXXX")
+  if tail -5000 "$LOG_FILE" > "$tmp_log" 2>/dev/null; then
+    mv "$tmp_log" "$LOG_FILE"
+  else
+    rm -f "$tmp_log"
+  fi
 fi
 
 # Exit codes: 0=clean, 1=warnings, 2=critical
