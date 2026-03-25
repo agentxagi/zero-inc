@@ -49,16 +49,7 @@ export function dashboardRoutes(db: Db) {
     try {
       const companyId = req.params.companyId as string;
       assertCompanyAccess(req, companyId);
-
-      const cacheKey = `agent-dashboard:${companyId}`;
-      const cached = getCached(cacheKey);
-      if (cached) {
-        res.json(cached);
-        return;
-      }
-
       const data = await svc.agentSummary(companyId);
-      setCache(cacheKey, data);
       res.json(data);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";

@@ -74,8 +74,7 @@ export function dashboardService(db: Db) {
             sql`${issues.status} != 'cancelled'`,
           ),
         )
-        .orderBy(issues.updatedAt)
-        .limit(200);
+        .orderBy(desc(issues.updatedAt));
 
       // Build agent name map
       const agentNameMap: Record<string, string> = {};

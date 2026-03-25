@@ -262,6 +262,16 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
 
+    const hasRunContextHeader =
+      typeof req.header("x-zeroinc-run-id") === "string" &&
+      req.header("x-zeroinc-run-id")!.trim().length > 0;
+
+    const includeRoutineExecutions =
+      req.query.includeRoutineExecutions === "true" ||
+      req.query.includeRoutineExecutions === "1" ||
+      req.actor.type === "agent" ||
+      hasRunContextHeader;
+
     const result = await svc.list(companyId, {
       status: q.status,
       assigneeAgentId: q.assigneeAgentId,
@@ -274,8 +284,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       labelId: req.query.labelId as string | undefined,
       originKind: req.query.originKind as string | undefined,
       originId: req.query.originId as string | undefined,
-      includeRoutineExecutions:
-        req.query.includeRoutineExecutions === "true" || req.query.includeRoutineExecutions === "1",
+      includeRoutineExecutions,
       q: req.query.q as string | undefined,
     });
     res.json(result);
