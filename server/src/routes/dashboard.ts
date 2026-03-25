@@ -306,11 +306,12 @@ export function dashboardRoutes(db: Db) {
 
       for (const issue of unassigned) {
         const agentId = await assigner.assignIssue(issue.id, companyId);
+        const identifier = issue.identifier ?? issue.id;
         if (agentId) {
           assignedCount++;
-          results.push({ identifier: issue.identifier, title: issue.title, assigned: true, agentId });
+          results.push({ identifier, title: issue.title, assigned: true, agentId });
         } else {
-          results.push({ identifier: issue.identifier, title: issue.title, assigned: false, reason: "No eligible agent found" });
+          results.push({ identifier, title: issue.title, assigned: false, reason: "No eligible agent found" });
         }
       }
 
