@@ -158,7 +158,7 @@ export const DEFAULT_QUALITY_GATE_CONFIG: Required<QualityGateConfig> = {
   requireComment: true,
   requireMinimumDuration: 5,
   requireVerificationEvidence: false,
-  autoReopen: true,
+  autoReopen: false,
 };
 
 // ---------------------------------------------------------------------------

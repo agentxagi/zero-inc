@@ -14,6 +14,8 @@ function createMockDb(overrides?: {
     companyId: "company-1",
     assigneeAgentId: "engineer-1",
     status: "in_review",
+    title: "[CODE] Implement API endpoint",
+    originKind: "manual",
     originalAssigneeId: "engineer-1",
     reviewCount: 0,
   };
@@ -180,6 +182,46 @@ describe("Review Pipeline Service", () => {
         "engineer-1",
         { passed: true, checks: [] },
         config,
+      );
+      expect(sentToReview).toBe(false);
+    });
+
+    it("skips review for routine_execution tasks", async () => {
+      const { mockDb } = createMockDb({
+        issueRow: {
+          companyId: "company-1",
+          assigneeAgentId: "engineer-1",
+          title: "[SYSTEM] Goal Breakdown",
+          originKind: "routine_execution",
+          reviewVerdict: null,
+        },
+      });
+      const pipeline = reviewPipelineService(mockDb);
+      const sentToReview = await pipeline.transitionToReview(
+        "issue-1",
+        "engineer-1",
+        { passed: true, checks: [] },
+        DEFAULT_REVIEW_PIPELINE_CONFIG,
+      );
+      expect(sentToReview).toBe(false);
+    });
+
+    it("skips review for non BUG/FEATURE/CODE tasks", async () => {
+      const { mockDb } = createMockDb({
+        issueRow: {
+          companyId: "company-1",
+          assigneeAgentId: "engineer-1",
+          title: "Content: publish engagement report",
+          originKind: "manual",
+          reviewVerdict: null,
+        },
+      });
+      const pipeline = reviewPipelineService(mockDb);
+      const sentToReview = await pipeline.transitionToReview(
+        "issue-1",
+        "engineer-1",
+        { passed: true, checks: [] },
+        DEFAULT_REVIEW_PIPELINE_CONFIG,
       );
       expect(sentToReview).toBe(false);
     });

@@ -24,7 +24,8 @@ Then act only on meaningful issues:
 ## Noise Control
 - Do not create duplicate operational tasks.
 - Do not post repeated comments without new context.
-- Max 3 proactive tasks per heartbeat unless outage/incident.
+- Max 2 proactive tasks per heartbeat unless outage/incident.
+- Only create proactive tasks when there are no real execution tasks in `todo`, `in_progress`, or `blocked`.
 - If system is healthy, do not invent work.
 
 ## Task Creation Rules

@@ -21,6 +21,8 @@ export interface QualityGateResult {
 interface IssueContext {
   id: string;
   companyId: string;
+  title: string;
+  originKind: string | null;
   status: string;
   assigneeAgentId: string | null;
   executionRunId: string | null;
@@ -28,6 +30,18 @@ interface IssueContext {
   startedAt: Date | null;
   completedAt: Date | null;
 }
+
+const CANONICAL_OUTPUT_ROOT = "/opt/paperclip/outputs/";
+const LEGACY_OUTPUT_PREFIXES = ["/root/clawd/"];
+const OUTPUT_REQUIRED_TITLE_KEYWORDS = [
+  "content",
+  "analytics",
+  "engagement",
+  "tweet",
+  "thread",
+  "report",
+  "metrics",
+];
 
 export type QualityState = "excellent" | "good" | "fair" | "poor" | "critical" | "warming_up";
 
@@ -185,6 +199,32 @@ export function qualityGateService(db: Db) {
 
     const pendingComment = normalizePendingComment(pendingCommentBody);
     const bodyLower = [pendingComment ?? "", ...comments.map((c) => (c.body ?? "").toLowerCase())].join(" ");
+
+    const hasLegacyOutputPath = LEGACY_OUTPUT_PREFIXES.some((prefix) =>
+      bodyLower.includes(prefix.toLowerCase()),
+    );
+    if (hasLegacyOutputPath) {
+      return {
+        pass: false,
+        message:
+          `Legacy output path detected in completion evidence. Use ${CANONICAL_OUTPUT_ROOT} for deliverables.`,
+        severity: "blocker",
+      };
+    }
+
+    const titleLower = (issue.title ?? "").toLowerCase();
+    const requiresOutputPath =
+      issue.originKind === "routine_execution" ||
+      OUTPUT_REQUIRED_TITLE_KEYWORDS.some((keyword) => titleLower.includes(keyword));
+    if (requiresOutputPath && !bodyLower.includes(CANONICAL_OUTPUT_ROOT.toLowerCase())) {
+      return {
+        pass: false,
+        message:
+          `Deliverable path missing. Operational/content work must publish outputs under ${CANONICAL_OUTPUT_ROOT}.`,
+        severity: "blocker",
+      };
+    }
+
     const hasVerification = verificationKeywords.some(kw => bodyLower.includes(kw));
 
     const hasStructuredFormat =

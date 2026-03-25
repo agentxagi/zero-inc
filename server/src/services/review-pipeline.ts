@@ -39,6 +39,11 @@ export const DEFAULT_REVIEW_PIPELINE_CONFIG: Required<ReviewPipelineConfig> = {
   reviewerRoles: ["qa", "code_reviewer"],
 };
 
+const REVIEW_REQUIRED_TITLE_PATTERNS = [
+  /\[(bug|feature|code)\]/i,
+  /^(bug|feature|code)\s*[:\-]/i,
+];
+
 // Wakeup dependency - injected to enable immediate agent notification
 export interface ReviewPipelineWakeupDeps {
   wakeup: (agentId: string, opts: {
@@ -165,10 +170,26 @@ export function reviewPipelineService(db: Db, wakeupDeps?: ReviewPipelineWakeupD
     // Recovery: if the issue already has an approved review verdict, skip re-review
     // and ensure it's in done status (handles stuck tasks from prior non-atomic updates)
     const [existing] = await db
-      .select({ reviewVerdict: issues.reviewVerdict })
+      .select({
+        reviewVerdict: issues.reviewVerdict,
+        originKind: issues.originKind,
+        title: issues.title,
+      })
       .from(issues)
       .where(eq(issues.id, issueId))
       .limit(1);
+
+    // Review gate only applies to BUG/FEATURE/CODE work. Routine and
+    // operational tasks should complete without entering review queue.
+    const title = typeof existing?.title === "string" ? existing.title.trim() : "";
+    const isRoutineExecution = existing?.originKind === "routine_execution";
+    const isReviewCategory =
+      title.length === 0
+        ? true
+        : REVIEW_REQUIRED_TITLE_PATTERNS.some((pattern) => pattern.test(title));
+    if (isRoutineExecution || !isReviewCategory) {
+      return false;
+    }
 
     if (existing?.reviewVerdict === "approved") {
       await db

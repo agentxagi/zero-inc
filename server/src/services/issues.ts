@@ -1157,6 +1157,8 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
           {
             id: result.id,
             companyId: result.companyId,
+            title: result.title,
+            originKind: result.originKind,
             status: existing.status,
             assigneeAgentId: existing.assigneeAgentId,
             executionRunId: result.executionRunId,

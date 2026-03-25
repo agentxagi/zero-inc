@@ -138,6 +138,10 @@ Before every `done` transition, you MUST perform verification appropriate to the
 | **Documentation** | Read the file you created/edited, verify it renders correctly |
 | **Design** | Take screenshot with `agent-browser`, verify visual elements match specs |
 
+For content/analytics/research deliverables, publish artifacts under:
+`/opt/paperclip/outputs/<YYYY-MM-DD>/...`
+Do not use legacy paths under `/root/clawd/...`.
+
 **Your completion comment MUST include:**
 1. **What** was done (summary)
 2. **Where** the output is (file paths, URLs)

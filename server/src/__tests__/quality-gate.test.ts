@@ -88,6 +88,8 @@ function createMockDb(options?: {
 function baseIssueContext(overrides?: Partial<{
   id: string;
   companyId: string;
+  title: string;
+  originKind: string | null;
   status: string;
   assigneeAgentId: string | null;
   executionRunId: string | null;
@@ -98,6 +100,8 @@ function baseIssueContext(overrides?: Partial<{
   return {
     id: "issue-1",
     companyId: "company-1",
+    title: "General maintenance task",
+    originKind: "manual",
     status: "in_progress",
     assigneeAgentId: "agent-1",
     executionRunId: "run-1",
@@ -340,6 +344,41 @@ describe("Quality Gate Service", () => {
         expect(durationCheck).toBeDefined();
         expect(durationCheck!.pass).toBe(true);
         expect(durationCheck!.message).toContain("skipped");
+      });
+    });
+
+    describe("output path contract", () => {
+      it("fails when legacy /root/clawd path appears in completion evidence", async () => {
+        const gate = qualityGateService(createMockDb({ commentCount: 1 }));
+        const ctx = baseIssueContext();
+        const result = await gate.runChecks(
+          ctx,
+          DEFAULT_QUALITY_GATE_CONFIG,
+          { pendingCommentBody: "Output written to /root/clawd/content-engine/data/report.md" },
+        );
+
+        const outputPathCheck = result.checks.find((c) => c.message.includes("Legacy output path"));
+        expect(outputPathCheck).toBeDefined();
+        expect(outputPathCheck!.pass).toBe(false);
+        expect(outputPathCheck!.severity).toBe("blocker");
+      });
+
+      it("requires canonical output root for routine_execution deliverables", async () => {
+        const gate = qualityGateService(createMockDb({ commentCount: 1 }));
+        const ctx = baseIssueContext({
+          title: "[SYSTEM] Daily report",
+          originKind: "routine_execution",
+        });
+        const result = await gate.runChecks(
+          ctx,
+          DEFAULT_QUALITY_GATE_CONFIG,
+          { pendingCommentBody: "## Done\n\nReport generated and verified." },
+        );
+
+        const outputPathCheck = result.checks.find((c) => c.message.includes("Deliverable path missing"));
+        expect(outputPathCheck).toBeDefined();
+        expect(outputPathCheck!.pass).toBe(false);
+        expect(outputPathCheck!.severity).toBe("blocker");
       });
     });
 

@@ -129,7 +129,7 @@ export function dashboardRoutes(db: Db) {
       }));
 
       // 2. AUTOMATABLE - Outputs ready for automation
-      const outputsDir = "/root/clawd/outputs";
+      const outputsDir = "/opt/paperclip/outputs";
       const automatable: Array<{ file: string; task: string; status: string; action: string }> = [];
       
       try {
