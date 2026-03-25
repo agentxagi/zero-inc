@@ -282,6 +282,20 @@ describe("Quality Gate Service", () => {
         expect(commentCheck!.pass).toBe(true);
       });
 
+      it("passes when completion comment is pending in request payload", async () => {
+        const gate = qualityGateService(createMockDb({ commentCount: 0 }));
+        const ctx = baseIssueContext();
+        const result = await gate.runChecks(
+          ctx,
+          DEFAULT_QUALITY_GATE_CONFIG,
+          { pendingCommentBody: "## Done\n\nCompleted routine sweep." },
+        );
+
+        const commentCheck = result.checks.find((c) => c.message.includes("comment"));
+        expect(commentCheck).toBeDefined();
+        expect(commentCheck!.pass).toBe(true);
+      });
+
       it("is skipped when requireComment is false", async () => {
         const gate = qualityGateService(createMockDb({ commentCount: 0 }));
         const ctx = baseIssueContext();

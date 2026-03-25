@@ -1035,7 +1035,11 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
       return result;
     },
 
-    update: async (id: string, data: Partial<typeof issues.$inferInsert> & { labelIds?: string[] }) => {
+    update: async (
+      id: string,
+      data: Partial<typeof issues.$inferInsert> & { labelIds?: string[] },
+      options?: { pendingCommentBody?: string | null },
+    ) => {
       const existing = await db
         .select()
         .from(issues)
@@ -1161,6 +1165,7 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
             completedAt: result.completedAt,
           },
           config,
+          { pendingCommentBody: options?.pendingCommentBody },
         );
         if (!qualityResult.passed && config.autoReopen) {
           const blockers = qualityResult.checks.filter((c) => !c.pass && c.severity === "blocker");

@@ -1,4 +1,4 @@
-import { eq, and, sql, lte, gt, isNull } from "drizzle-orm";
+import { eq, and, sql, lte, gt, isNull, ne } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
 import { issues, agents, issueComments } from "@zeroinc/db";
 import { governanceSettingsService, DEFAULT_GOVERNANCE_SETTINGS, type GovernanceSettings } from "./governance-settings.js";
@@ -16,12 +16,31 @@ interface StaleIssue {
   startedAt: Date | null;
 }
 
+const HUMAN_BLOCKER_KEYWORDS = [
+  "twitter_auth_token",
+  "twitter_ct0",
+  "auth token",
+  "not_authenticated",
+  "authentication",
+  "credential",
+  "cookie",
+  "manual",
+  "board user",
+  "who can unblock",
+  "needs human",
+  "human action",
+  "requires access",
+  "api key",
+];
+
 interface StaleAction {
   issueId: string;
   companyId: string;
   action: "warn" | "block" | "escalate" | "ping_reviewer" | "flag_qa" | "comment" | "auto_approve_orphan";
   reason: string;
   newStatus?: string;
+  escalateToAgentId?: string | null;
+  escalateToUserId?: string | null;
 }
 
 export interface StaleDetectionWakeupDeps {
@@ -36,6 +55,7 @@ export interface StaleDetectionWakeupDeps {
 
 export function staleDetectionService(db: Db, wakeupDeps?: StaleDetectionWakeupDeps) {
   const gov = governanceSettingsService(db);
+  const LOCAL_BOARD_USER_ID = "local-board";
 
   async function detect(): Promise<StaleAction[]> {
     const settings = await gov.get();
@@ -81,14 +101,23 @@ export function staleDetectionService(db: Db, wakeupDeps?: StaleDetectionWakeupD
       const recentStaleComment = await hasRecentStaleComment(issue.id, "stale-escalate");
       if (recentStaleComment) continue;
 
+      const requiresHumanInput = await hasHumanBlockerSignal(issue.id);
       // Find CTO for this company
       const cto = await findCompanyCTO(issue.companyId);
+      const ctoInvokable = cto ? isInvokableEscalationAgentStatus(cto.status) : false;
+      const assignToBoard = requiresHumanInput || !ctoInvokable;
       actions.push({
         issueId: issue.id,
         companyId: issue.companyId,
         action: "escalate",
-        reason: `Blocked task has had no escalation for ${settings.staleBlockedEscalateMinutes} minutes. Escalating to CTO.${cto ? ` Reassigning to ${cto.name}.` : " No CTO agent found — commenting instead."}`,
-        ...(cto ? { newStatus: "blocked" } : {}),
+        reason: requiresHumanInput
+          ? `Blocked task has had no escalation for ${settings.staleBlockedEscalateMinutes} minutes. Human input is required based on blocker context — assigning to board user ${LOCAL_BOARD_USER_ID}.`
+          : ctoInvokable
+          ? `Blocked task has had no escalation for ${settings.staleBlockedEscalateMinutes} minutes. Escalating to CTO. Reassigning to ${cto?.name}.`
+          : `Blocked task has had no escalation for ${settings.staleBlockedEscalateMinutes} minutes. No invokable CTO available — assigning to board user ${LOCAL_BOARD_USER_ID}.`,
+        ...(assignToBoard
+          ? { escalateToAgentId: null, escalateToUserId: LOCAL_BOARD_USER_ID }
+          : { escalateToAgentId: cto!.id, escalateToUserId: null }),
       });
     }
 
@@ -234,15 +263,33 @@ export function staleDetectionService(db: Db, wakeupDeps?: StaleDetectionWakeupD
     return result.length > 0;
   }
 
-  async function findCompanyCTO(companyId: string): Promise<{ id: string; name: string } | null> {
+  async function hasHumanBlockerSignal(issueId: string): Promise<boolean> {
+    const rows = await db
+      .select({ body: issueComments.body })
+      .from(issueComments)
+      .where(eq(issueComments.issueId, issueId))
+      .limit(5);
+
+    const haystack = rows
+      .map((row) => (row.body ?? "").toLowerCase())
+      .join("\n");
+    return HUMAN_BLOCKER_KEYWORDS.some((keyword) => haystack.includes(keyword));
+  }
+
+  function isInvokableEscalationAgentStatus(status: string): boolean {
+    return status === "idle" || status === "running";
+  }
+
+  async function findCompanyCTO(companyId: string): Promise<{ id: string; name: string; status: string } | null> {
     const result = await db
-      .select({ id: agents.id, name: agents.name })
+      .select({ id: agents.id, name: agents.name, status: agents.status })
       .from(agents)
       .where(
         and(
           eq(agents.companyId, companyId),
           eq(agents.role, "cto"),
-          eq(agents.status, "active"),
+          ne(agents.status, "terminated"),
+          ne(agents.status, "pending_approval"),
         ),
       )
       .limit(1);
@@ -310,6 +357,33 @@ export function staleDetectionService(db: Db, wakeupDeps?: StaleDetectionWakeupD
           authorUserId: null,
           body: `[stale:stale-escalate] ${action.reason}\n\n_Auto-detected by stale detection._`,
         });
+
+        const [currentIssue] = await db
+          .select({ assigneeAgentId: issues.assigneeAgentId, assigneeUserId: issues.assigneeUserId })
+          .from(issues)
+          .where(eq(issues.id, action.issueId))
+          .limit(1);
+
+        const patch: Partial<typeof issues.$inferInsert> = { updatedAt: new Date() };
+        if (action.escalateToAgentId && currentIssue?.assigneeAgentId !== action.escalateToAgentId) {
+          patch.assigneeAgentId = action.escalateToAgentId;
+          patch.assigneeUserId = null;
+        } else if (action.escalateToUserId && currentIssue?.assigneeUserId !== action.escalateToUserId) {
+          patch.assigneeUserId = action.escalateToUserId;
+          patch.assigneeAgentId = null;
+        }
+
+        await db.update(issues).set(patch).where(eq(issues.id, action.issueId));
+
+        if (action.escalateToAgentId && wakeupDeps?.wakeup) {
+          void wakeupDeps.wakeup(action.escalateToAgentId, {
+            source: "automation",
+            triggerDetail: "system",
+            reason: "stale_blocked_escalation",
+            payload: { issueId: action.issueId },
+            contextSnapshot: { issueId: action.issueId, source: "stale_detection" },
+          }).catch(() => {});
+        }
         break;
       }
       case "ping_reviewer": {

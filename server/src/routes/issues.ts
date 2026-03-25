@@ -876,7 +876,9 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
     let issue;
     try {
-      issue = await svc.update(id, updateFields);
+      issue = await svc.update(id, updateFields, {
+        pendingCommentBody: typeof commentBody === "string" ? commentBody : null,
+      });
     } catch (err) {
       if (err instanceof HttpError && err.status === 422) {
         logger.warn(

@@ -127,7 +127,25 @@ export function qualityGateService(db: Db) {
 
   // --- Individual checks ---
 
-  async function checkCommentRequired(issue: IssueContext): Promise<QualityCheckResult> {
+  function normalizePendingComment(pendingCommentBody?: string | null): string | null {
+    if (typeof pendingCommentBody !== "string") return null;
+    const trimmed = pendingCommentBody.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  async function checkCommentRequired(
+    issue: IssueContext,
+    pendingCommentBody?: string | null,
+  ): Promise<QualityCheckResult> {
+    const pendingComment = normalizePendingComment(pendingCommentBody);
+    if (pendingComment) {
+      return {
+        pass: true,
+        message: "Completion comment provided in request payload.",
+        severity: "info",
+      };
+    }
+
     const [row] = await db
       .select({ count: sql<number>`count(*)` })
       .from(issueComments)
@@ -144,7 +162,11 @@ export function qualityGateService(db: Db) {
     return { pass: true, message: `Completion comment present (${count} comment${count > 1 ? "s" : ""} on issue).`, severity: "info" };
   }
 
-  async function checkVerificationEvidence(issue: IssueContext, requireAsBlocker: boolean): Promise<QualityCheckResult> {
+  async function checkVerificationEvidence(
+    issue: IssueContext,
+    requireAsBlocker: boolean,
+    pendingCommentBody?: string | null,
+  ): Promise<QualityCheckResult> {
     // Fetch all comments for this issue (reverse chronological)
     const comments = await db
       .select({ body: issueComments.body })
@@ -161,7 +183,8 @@ export function qualityGateService(db: Db) {
       "file exists", "agent-browser",
     ];
 
-    const bodyLower = comments.map(c => (c.body ?? "").toLowerCase()).join(" ");
+    const pendingComment = normalizePendingComment(pendingCommentBody);
+    const bodyLower = [pendingComment ?? "", ...comments.map((c) => (c.body ?? "").toLowerCase())].join(" ");
     const hasVerification = verificationKeywords.some(kw => bodyLower.includes(kw));
 
     const hasStructuredFormat =
@@ -256,6 +279,7 @@ export function qualityGateService(db: Db) {
   async function runChecks(
     issue: IssueContext,
     config: Required<QualityGateConfig>,
+    options?: { pendingCommentBody?: string | null },
   ): Promise<QualityGateResult> {
     if (!config.enabled) {
       return { passed: true, checks: [] };
@@ -265,9 +289,11 @@ export function qualityGateService(db: Db) {
 
     // Mandatory checks
     if (config.requireComment) {
-      checks.push(await checkCommentRequired(issue));
+      checks.push(await checkCommentRequired(issue, options?.pendingCommentBody));
     }
-    checks.push(await checkVerificationEvidence(issue, config.requireVerificationEvidence));
+    checks.push(
+      await checkVerificationEvidence(issue, config.requireVerificationEvidence, options?.pendingCommentBody),
+    );
     checks.push(await checkDurationSanity(issue, config.requireMinimumDuration));
     checks.push(await checkNoStaleLock(issue));
 

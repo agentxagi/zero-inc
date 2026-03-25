@@ -168,14 +168,63 @@ describe("staleDetectionService", () => {
         [],           // 2. findStaleIssues for block (no in_progress stale)
         [staleIssue], // 3. findStaleIssues for escalate
         [],           // 4. hasRecentStaleComment → no recent
-        [],           // 5. findCompanyCTO → no CTO
-        [],           // 6. findStaleIssues for review
-        [],           // 7. findDoneIssuesNoQuality
+        [],           // 5. hasHumanBlockerSignal → no human signal
+        [],           // 6. findCompanyCTO → no CTO
+        [],           // 7. findStaleIssues for review
+        [],           // 8. findDoneIssuesNoQuality
       ]);
 
       const svc = staleDetectionService(db);
       const actions = await svc.detect();
       expect(actions.some(a => a.action === "escalate")).toBe(true);
+    });
+
+    it("assigns stale blocked escalation to an invokable CTO when available", async () => {
+      const staleIssue = makeIssue({
+        status: "blocked",
+        updatedAt: new Date(Date.now() - 250 * 60 * 1000),
+      });
+      setupSelects([
+        [], // 1. findStaleIssues for warn
+        [], // 2. findStaleIssues for block
+        [staleIssue], // 3. findStaleIssues for escalate
+        [], // 4. hasRecentStaleComment
+        [], // 5. hasHumanBlockerSignal
+        [{ id: "cto-1", name: "CTO", status: "idle" }], // 6. findCompanyCTO
+        [], // 7. findStaleIssues for review
+        [], // 8. findDoneIssuesNoQuality
+      ]);
+
+      const svc = staleDetectionService(db);
+      const actions = await svc.detect();
+      const escalation = actions.find((a) => a.action === "escalate");
+      expect(escalation).toBeDefined();
+      expect((escalation as any).escalateToAgentId).toBe("cto-1");
+      expect((escalation as any).escalateToUserId).toBeNull();
+    });
+
+    it("falls back stale blocked escalation to local-board when CTO is not invokable", async () => {
+      const staleIssue = makeIssue({
+        status: "blocked",
+        updatedAt: new Date(Date.now() - 250 * 60 * 1000),
+      });
+      setupSelects([
+        [], // 1. findStaleIssues for warn
+        [], // 2. findStaleIssues for block
+        [staleIssue], // 3. findStaleIssues for escalate
+        [], // 4. hasRecentStaleComment
+        [], // 5. hasHumanBlockerSignal
+        [{ id: "cto-1", name: "CTO", status: "error" }], // 6. findCompanyCTO
+        [], // 7. findStaleIssues for review
+        [], // 8. findDoneIssuesNoQuality
+      ]);
+
+      const svc = staleDetectionService(db);
+      const actions = await svc.detect();
+      const escalation = actions.find((a) => a.action === "escalate");
+      expect(escalation).toBeDefined();
+      expect((escalation as any).escalateToAgentId).toBeNull();
+      expect((escalation as any).escalateToUserId).toBe("local-board");
     });
 
     it("detects stale in_review issues for reviewer ping", async () => {
@@ -302,6 +351,34 @@ describe("staleDetectionService", () => {
       expect(mockInsert).toHaveBeenCalled();
       const callBody = mockInsertValues.mock.calls[0][0].body as string;
       expect(callBody).toContain("[stale:");
+    });
+
+    it("reassigns stale blocked escalation to local-board when no invokable CTO exists", async () => {
+      const staleIssue = makeIssue({
+        status: "blocked",
+        updatedAt: new Date(Date.now() - 250 * 60 * 1000),
+      });
+      setupSelects([
+        [], // 1. findStaleIssues for warn
+        [], // 2. findStaleIssues for block
+        [staleIssue], // 3. findStaleIssues for escalate
+        [], // 4. hasRecentStaleComment
+        [], // 5. hasHumanBlockerSignal
+        [], // 6. findCompanyCTO
+        [], // 7. findStaleIssues for review
+        [], // 8. findDoneIssuesNoQuality
+        [{ assigneeAgentId: "agent-1", assigneeUserId: null }], // 9. applyAction/escalate current issue
+      ]);
+
+      const svc = staleDetectionService(db);
+      await svc.run();
+
+      expect(mockUpdateSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assigneeAgentId: null,
+          assigneeUserId: "local-board",
+        }),
+      );
     });
   });
 });
