@@ -78,6 +78,57 @@ interface ClaudeRuntimeConfig {
   extraArgs: string[];
 }
 
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function hasEnvValue(env: Record<string, string>, key: string): boolean {
+  return typeof env[key] === "string" && env[key].trim().length > 0;
+}
+
+async function resolveTwitterEnvFromCookies(): Promise<{
+  authToken: string | null;
+  ct0: string | null;
+}> {
+  const homeDir = process.env.HOME || os.homedir();
+  const cookiesPath = path.join(homeDir, ".cache", "twitter-cli", "cookies.json");
+
+  try {
+    const raw = await fs.readFile(cookiesPath, "utf-8");
+    const parsed = parseJson(raw);
+
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const map = parsed as Record<string, unknown>;
+      return {
+        authToken: nonEmptyString(map.auth_token),
+        ct0: nonEmptyString(map.ct0),
+      };
+    }
+
+    if (Array.isArray(parsed)) {
+      let authToken: string | null = null;
+      let ct0: string | null = null;
+      for (const entry of parsed) {
+        if (typeof entry !== "object" || entry === null) continue;
+        const cookie = entry as Record<string, unknown>;
+        const name = nonEmptyString(cookie.name);
+        const value = nonEmptyString(cookie.value);
+        if (!name || !value) continue;
+        if (name === "auth_token" && !authToken) authToken = value;
+        if (name === "ct0" && !ct0) ct0 = value;
+      }
+      return { authToken, ct0 };
+    }
+  } catch {
+    // Best-effort fallback: if no cookie store is present we simply continue.
+  }
+
+  return {
+    authToken: null,
+    ct0: null,
+  };
+}
+
 function buildLoginResult(input: {
   proc: RunProcessResult;
   loginUrl: string | null;
@@ -235,6 +286,24 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
 
   for (const [key, value] of Object.entries(envConfig)) {
     if (typeof value === "string") env[key] = value;
+  }
+
+  if (!hasEnvValue(env, "TWITTER_AUTH_TOKEN")) {
+    const fromHost = nonEmptyString(process.env.TWITTER_AUTH_TOKEN);
+    if (fromHost) env.TWITTER_AUTH_TOKEN = fromHost;
+  }
+  if (!hasEnvValue(env, "TWITTER_CT0")) {
+    const fromHost = nonEmptyString(process.env.TWITTER_CT0);
+    if (fromHost) env.TWITTER_CT0 = fromHost;
+  }
+  if (!hasEnvValue(env, "TWITTER_AUTH_TOKEN") || !hasEnvValue(env, "TWITTER_CT0")) {
+    const fromCookies = await resolveTwitterEnvFromCookies();
+    if (!hasEnvValue(env, "TWITTER_AUTH_TOKEN") && fromCookies.authToken) {
+      env.TWITTER_AUTH_TOKEN = fromCookies.authToken;
+    }
+    if (!hasEnvValue(env, "TWITTER_CT0") && fromCookies.ct0) {
+      env.TWITTER_CT0 = fromCookies.ct0;
+    }
   }
 
   if (!hasExplicitApiKey && authToken) {
