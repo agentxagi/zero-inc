@@ -34,6 +34,10 @@ type ChildProcessWithEvents = ChildProcess & {
   ): ChildProcess;
 };
 
+function hasChildExited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
 export const runningProcesses = new Map<string, RunningProcess>();
 export const MAX_CAPTURE_BYTES = 4 * 1024 * 1024;
 export const MAX_EXCERPT_BYTES = 32 * 1024;
@@ -811,8 +815,12 @@ export async function runChildProcess(
               timedOut = true;
               child.kill("SIGTERM");
               setTimeout(() => {
-                if (!child.killed) {
-                  child.kill("SIGKILL");
+                if (!hasChildExited(child)) {
+                  try {
+                    child.kill("SIGKILL");
+                  } catch {
+                    // Process already exited or cannot be signaled.
+                  }
                 }
               }, Math.max(1, opts.graceSec) * 1000);
             }, opts.timeoutSec * 1000);
@@ -826,8 +834,12 @@ export async function runChildProcess(
           timedOut = true;
           child.kill("SIGTERM");
           setTimeout(() => {
-            if (!child.killed) {
-              child.kill("SIGKILL");
+            if (!hasChildExited(child)) {
+              try {
+                child.kill("SIGKILL");
+              } catch {
+                // Process already exited or cannot be signaled.
+              }
             }
           }, Math.max(1, opts.graceSec) * 1000);
         }, maxWallClockSec * 1000);

@@ -285,8 +285,12 @@ function terminateChildProcess(child: ChildProcess) {
       // Fall through to the direct child kill.
     }
   }
-  if (!child.killed) {
-    child.kill("SIGTERM");
+  if (child.exitCode === null && child.signalCode === null) {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      // Process already exited or cannot be signaled.
+    }
   }
 }
 

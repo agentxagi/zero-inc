@@ -829,6 +829,13 @@ function isProcessAlive(pid: number | null | undefined) {
   }
 }
 
+function hasChildExited(
+  child: { exitCode: number | null; signalCode: string | null } | null | undefined,
+) {
+  if (!child) return true;
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
 function truncateDisplayId(value: string | null | undefined, max = 128) {
   if (!value) return null;
   return value.length > max ? value.slice(0, max) : value;
@@ -4403,11 +4410,19 @@ export function heartbeatService(db: Db) {
 
     const running = runningProcesses.get(run.id);
     if (running) {
-      running.child.kill("SIGTERM");
+      try {
+        running.child.kill("SIGTERM");
+      } catch {
+        // Process already exited or cannot be signaled.
+      }
       const graceMs = Math.max(1, running.graceSec) * 1000;
       setTimeout(() => {
-        if (!running.child.killed) {
-          running.child.kill("SIGKILL");
+        if (!hasChildExited(running.child)) {
+          try {
+            running.child.kill("SIGKILL");
+          } catch {
+            // Process already exited or cannot be signaled.
+          }
         }
       }, graceMs);
     }
@@ -4484,7 +4499,21 @@ export function heartbeatService(db: Db) {
 
       const running = runningProcesses.get(run.id);
       if (running) {
-        running.child.kill("SIGTERM");
+        try {
+          running.child.kill("SIGTERM");
+        } catch {
+          // Process already exited or cannot be signaled.
+        }
+        const graceMs = Math.max(1, running.graceSec) * 1000;
+        setTimeout(() => {
+          if (!hasChildExited(running.child)) {
+            try {
+              running.child.kill("SIGKILL");
+            } catch {
+              // Process already exited or cannot be signaled.
+            }
+          }
+        }, graceMs);
         runningProcesses.delete(run.id);
       }
       await releaseIssueExecutionAndPromote(run);
