@@ -3,8 +3,11 @@ import { and, eq, or, sql } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
 import { agents, issues } from "@zeroinc/db";
 import { dashboardService } from "../services/dashboard.js";
+import { productCouncilService } from "../services/product-council.js";
+import { issueService } from "../services/issues.js";
+import { logActivity } from "../services/activity-log.js";
 import { smartAssignerService } from "../services/smart-assigner.js";
-import { assertCompanyAccess } from "./authz.js";
+import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -29,6 +32,8 @@ function setCache(key: string, data: unknown): void {
 export function dashboardRoutes(db: Db) {
   const router = Router();
   const svc = dashboardService(db);
+  const council = productCouncilService(db);
+  const issuesSvc = issueService(db);
 
   // Existing route for company dashboard
   router.get("/companies/:companyId/dashboard", async (req, res) => {
@@ -51,6 +56,168 @@ export function dashboardRoutes(db: Db) {
       assertCompanyAccess(req, companyId);
       const data = await svc.agentSummary(companyId);
       res.json(data);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
+  /**
+   * GET /api/dashboard/companies/:companyId/product-council
+   * Outcome-oriented planning snapshot used by PM/CTO.
+   */
+  router.get("/companies/:companyId/product-council", async (req, res) => {
+    try {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const maxProposalsRaw = req.query.maxProposals;
+      const maxProposals = typeof maxProposalsRaw === "string" ? Number.parseInt(maxProposalsRaw, 10) : undefined;
+      const goalId = typeof req.query.goalId === "string" ? req.query.goalId : undefined;
+      const data = await council.analyze(companyId, {
+        goalId: goalId && goalId.length > 0 ? goalId : undefined,
+        maxProposals: Number.isFinite(maxProposals) ? maxProposals : undefined,
+      });
+      res.json(data);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
+  /**
+   * POST /api/dashboard/companies/:companyId/product-council/generate
+   * Materializes council proposals as backlog/todo issues.
+   */
+  router.post("/companies/:companyId/product-council/generate", async (req, res) => {
+    try {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+      const actor = getActorInfo(req);
+
+      const body = (req.body ?? {}) as {
+        goalId?: string | null;
+        maxProposals?: number;
+        dryRun?: boolean;
+        targetStatus?: "backlog" | "todo";
+      };
+
+      const targetStatus = body.targetStatus === "todo" ? "todo" : "backlog";
+      const report = await council.analyze(companyId, {
+        goalId: body.goalId ?? undefined,
+        maxProposals: body.maxProposals,
+      });
+
+      if (!report.gating.shouldGenerate) {
+        res.json({
+          generated: 0,
+          skipped: report.proposals.length,
+          reason: report.gating.reason,
+          dryRun: Boolean(body.dryRun),
+          report,
+        });
+        return;
+      }
+
+      if (body.dryRun === true) {
+        res.json({
+          generated: 0,
+          skipped: 0,
+          dryRun: true,
+          report,
+          createdIssues: [],
+          skippedProposals: [],
+        });
+        return;
+      }
+
+      const openRows = await db
+        .select({
+          id: issues.id,
+          title: issues.title,
+        })
+        .from(issues)
+        .where(
+          and(
+            eq(issues.companyId, companyId),
+            sql`${issues.status} in ('backlog','todo','in_progress','in_review','blocked')`,
+            sql`${issues.hiddenAt} is null`,
+          ),
+        )
+        .limit(400);
+      const openTitleSet = new Set(openRows.map((row) => row.title.trim().toLowerCase()));
+
+      const createdIssues: Array<{ id: string; identifier: string; title: string }> = [];
+      const skippedProposals: Array<{ proposalId: string; title: string; reason: string }> = [];
+
+      for (const proposal of report.proposals) {
+        const normalizedTitle = proposal.title.trim().toLowerCase();
+        if (!normalizedTitle || openTitleSet.has(normalizedTitle)) {
+          skippedProposals.push({
+            proposalId: proposal.id,
+            title: proposal.title,
+            reason: "duplicate_open_title",
+          });
+          continue;
+        }
+
+        const definitionOfDone = proposal.definitionOfDone
+          .map((item) => `- ${item}`)
+          .join("\n");
+        const issueDescription =
+          `${proposal.description}\n\n` +
+          `Suggested owner role: ${proposal.suggestedOwnerRole ?? "n/a"}\n` +
+          `Suggested assignee: ${proposal.suggestedAssigneeName ?? "n/a"}\n\n` +
+          "## Definition of Done\n" +
+          `${definitionOfDone}\n\n` +
+          `Generated by Product Council at ${report.timestamp}.`;
+
+        const created = await issuesSvc.create(companyId, {
+          title: proposal.title,
+          description: issueDescription,
+          status: targetStatus,
+          priority: proposal.priority,
+          goalId: report.goal?.id ?? null,
+          originKind: "manual",
+          createdByAgentId: actor.agentId,
+          createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+        });
+
+        openTitleSet.add(normalizedTitle);
+        createdIssues.push({
+          id: created.id,
+          identifier: created.identifier ?? created.id,
+          title: created.title,
+        });
+
+        await logActivity(db, {
+          companyId,
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          runId: actor.runId,
+          action: "issue.created",
+          entityType: "issue",
+          entityId: created.id,
+          details: {
+            title: created.title,
+            identifier: created.identifier,
+            source: "product_council",
+            proposalId: proposal.id,
+            sourceMilestoneId: proposal.sourceMilestoneId,
+          },
+        });
+      }
+
+      res.status(201).json({
+        generated: createdIssues.length,
+        skipped: skippedProposals.length,
+        dryRun: false,
+        reason: report.gating.reason,
+        report,
+        createdIssues,
+        skippedProposals,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: errorMessage });

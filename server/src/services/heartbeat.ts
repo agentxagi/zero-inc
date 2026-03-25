@@ -54,6 +54,7 @@ import {
 import { staleDetectionService } from "./stale-detection.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import { dashboardService } from "./dashboard.js";
+import { productCouncilService } from "./product-council.js";
 import { redactCurrentUserText, redactCurrentUserValue } from "../log-redaction.js";
 import { fetchAllQuotaWindows } from "./quota-windows.js";
 import { evaluatePreventiveQuotaThrottle, type PreventiveQuotaThrottleDecision } from "./preventive-quota-throttle.js";
@@ -1092,6 +1093,7 @@ export function heartbeatService(db: Db) {
     wakeup: (...args) => enqueueWakeup(...args),
   });
   const dashboard = dashboardService(db);
+  const productCouncil = productCouncilService(db);
   const activeRunExecutions = new Set<string>();
   const budgetHooks = {
     cancelWorkForScope: cancelBudgetScopeWork,
@@ -3796,6 +3798,14 @@ export function heartbeatService(db: Db) {
         enrichedContextSnapshot.dashboardSummary = summary;
       } catch (err) {
         logger.warn(`[heartbeat] Failed to inject dashboard summary for PM agent ${agentId}: ${err}`);
+      }
+    }
+    if (agent.role === "pm" && !enrichedContextSnapshot.productCouncilSummary) {
+      try {
+        const summary = await productCouncil.analyze(agent.companyId, { maxProposals: 5 });
+        enrichedContextSnapshot.productCouncilSummary = summary;
+      } catch (err) {
+        logger.warn(`[heartbeat] Failed to inject product council summary for PM agent ${agentId}: ${err}`);
       }
     }
 
