@@ -16,10 +16,10 @@ This walks you through setup, configures your environment, and gets ZeroInc runn
 To start Paperclip again later:
 
 ```sh
-npx paperclipai run
+npx zeroinc run
 ```
 
-> **Note:** If you used `npx` for setup, always use `npx paperclipai` to run commands. The `pnpm paperclipai` form only works inside a cloned copy of the Paperclip repository (see Local Development below).
+> **Note:** If you used `npx` for setup, always use `npx zeroinc` to run commands. The `pnpm zeroinc` form only works inside a cloned copy of the Paperclip repository (see Local Development below).
 
 ## Local Development
 

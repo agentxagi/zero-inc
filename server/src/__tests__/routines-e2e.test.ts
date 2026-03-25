@@ -132,7 +132,7 @@ async function startTempDatabase() {
     port,
     persistent: true,
     createPostgresUser: true,
-    initdbFlags: ["--encoding=UTF8", "--locale=C"],
+    initdbFlags: ["--encoding=UTF8", "--locale=C", "--lc-messages=C"],
     onLog: () => {},
     onError: () => {},
   });

@@ -116,6 +116,7 @@ export function InstanceGeneralSettings() {
           </div>
           <button
             type="button"
+            data-slot="toggle"
             aria-label="Toggle username log censoring"
             disabled={toggleMutation.isPending}
             className={cn(

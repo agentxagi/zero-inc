@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { pickTextColorForPillBg } from "@/lib/color-contrast";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { issuesApi } from "../api/issues";
@@ -170,6 +171,9 @@ interface IssuesListProps {
   initialAssignees?: string[];
   initialSearch?: string;
   approvalIssueIds?: Set<string>;
+  searchFilters?: {
+    participantAgentId?: string;
+  };
   onSearchChange?: (search: string) => void;
   onUpdateIssue: (id: string, data: Record<string, unknown>) => void;
 }
@@ -187,6 +191,7 @@ export function IssuesList({
   initialAssignees,
   initialSearch,
   approvalIssueIds,
+  searchFilters,
   onSearchChange,
   onUpdateIssue,
 }: IssuesListProps) {
@@ -244,8 +249,11 @@ export function IssuesList({
   }, [scopedKey]);
 
   const { data: searchedIssues = [] } = useQuery({
-    queryKey: queryKeys.issues.search(selectedCompanyId!, normalizedIssueSearch, projectId),
-    queryFn: () => issuesApi.list(selectedCompanyId!, { q: normalizedIssueSearch, projectId }),
+    queryKey: [
+      ...queryKeys.issues.search(selectedCompanyId!, normalizedIssueSearch, projectId),
+      searchFilters ?? {},
+    ],
+    queryFn: () => issuesApi.list(selectedCompanyId!, { q: normalizedIssueSearch, projectId, ...searchFilters }),
     enabled: !!selectedCompanyId && normalizedIssueSearch.length > 0,
   });
 
@@ -699,9 +707,6 @@ export function IssuesList({
                   )}
                   desktopMetaLeading={(
                     <>
-                      <span className="hidden sm:inline-flex">
-                        <PriorityIcon priority={issue.priority} />
-                      </span>
                       <span
                         className="hidden shrink-0 sm:inline-flex"
                         onClick={(e) => {
@@ -741,7 +746,7 @@ export function IssuesList({
                               className="inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium"
                               style={{
                                 borderColor: label.color,
-                                color: label.color,
+                                color: pickTextColorForPillBg(label.color, 0.12),
                                 backgroundColor: `${label.color}1f`,
                               }}
                             >
