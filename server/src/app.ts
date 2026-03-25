@@ -161,6 +161,10 @@ export async function createApp(
   api.use(secretRoutes(db));
   api.use(costRoutes(db));
   api.use(activityRoutes(db));
+  // Keep dashboard routes available under both:
+  // - /api/companies/:companyId/dashboard (UI contract)
+  // - /api/dashboard/... (legacy/automation paths)
+  api.use(dashboardRoutes(db));
   api.use("/dashboard", dashboardRoutes(db));
   api.use(sidebarBadgeRoutes(db));
   api.use(instanceSettingsRoutes(db));
