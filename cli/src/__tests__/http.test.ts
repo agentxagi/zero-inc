@@ -63,7 +63,7 @@ describe("ZeroIncApiClient", () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
     vi.stubGlobal("fetch", fetchMock);
 
-    const client = new PaperclipApiClient({ apiBase: "http://localhost:3100" });
+    const client = new ZeroIncApiClient({ apiBase: "http://localhost:3100" });
 
     await expect(client.post("/api/companies/import/preview", {})).rejects.toBeInstanceOf(ApiConnectionError);
     await expect(client.post("/api/companies/import/preview", {})).rejects.toMatchObject({
@@ -90,7 +90,7 @@ describe("ZeroIncApiClient", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const recoverAuth = vi.fn().mockResolvedValue("board-token-123");
-    const client = new PaperclipApiClient({
+    const client = new ZeroIncApiClient({
       apiBase: "http://localhost:3100",
       recoverAuth,
     });
