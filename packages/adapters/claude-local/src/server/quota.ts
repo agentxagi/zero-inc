@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -435,15 +435,96 @@ function buildClaudeCliShellProbeCommand(): string {
   return `${feed} | script -q -e -f -c ${quoteForShell(claudeCommand)} /dev/null`;
 }
 
+function killProcessTree(pid: number, signal: NodeJS.Signals): void {
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  if (process.platform !== "win32") {
+    try {
+      process.kill(-pid, signal);
+      return;
+    } catch {
+      // Fall back to direct child kill.
+    }
+  }
+  try {
+    process.kill(pid, signal);
+  } catch {
+    // Process already exited or cannot be signaled.
+  }
+}
+
+async function runClaudeCliShellProbe(command: string, timeoutMs: number): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const child = spawn("sh", ["-c", command], {
+      env: createClaudeQuotaEnv(),
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let settled = false;
+
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      fn();
+    };
+
+    child.stdout?.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      if (typeof child.pid === "number") {
+        const pid = child.pid;
+        killProcessTree(pid, "SIGTERM");
+        setTimeout(() => {
+          killProcessTree(pid, "SIGKILL");
+        }, 1000).unref();
+      }
+    }, timeoutMs);
+
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      settle(() => reject(error));
+    });
+
+    child.on("close", (code, signal) => {
+      clearTimeout(timeout);
+      const output = `${stdout}${stderr}`;
+      if (!timedOut && code === 0) {
+        settle(() => resolve(output));
+        return;
+      }
+      const error = new Error(
+        timedOut
+          ? `Claude CLI usage probe timed out after ${timeoutMs}ms`
+          : `Claude CLI usage probe exited with code ${code ?? "null"}${signal ? ` (${signal})` : ""}`,
+      ) as Error & {
+        stdout: string;
+        stderr: string;
+        code: number | null;
+        signal: NodeJS.Signals | null;
+      };
+      error.stdout = stdout;
+      error.stderr = stderr;
+      error.code = code;
+      error.signal = signal;
+      settle(() => reject(error));
+      return;
+    });
+  });
+}
+
 export async function captureClaudeCliUsageText(timeoutMs = 12_000): Promise<string> {
   const command = buildClaudeCliShellProbeCommand();
   try {
-    const { stdout, stderr } = await execFileAsync("sh", ["-c", command], {
-      env: createClaudeQuotaEnv(),
-      timeout: timeoutMs,
-      maxBuffer: 8 * 1024 * 1024,
-    });
-    const output = `${stdout}${stderr}`;
+    const output = await runClaudeCliShellProbe(command, timeoutMs);
     const cleaned = cleanTerminalText(output);
     if (usageOutputLooksComplete(cleaned)) return output;
     throw new Error("Claude CLI usage probe ended before rendering usage.");
