@@ -3,6 +3,12 @@ import type { Db } from "@zeroinc/db";
 import { agents, approvals, companies, costEvents, issues, sprints, goals } from "@zeroinc/db";
 import { notFound } from "../errors.js";
 import { budgetService } from "./budgets.js";
+import {
+  inferReviewLaneForIssue,
+  reviewSlaDueAtForLane,
+  reviewSlaHoursForLane,
+  reviewSlaStateForDueAt,
+} from "./review-pipeline.js";
 
 export function dashboardService(db: Db) {
   const budgets = budgetService(db);
@@ -60,9 +66,11 @@ export function dashboardService(db: Db) {
           assigneeAgentId: issues.assigneeAgentId,
           assigneeUserId: issues.assigneeUserId,
           reviewerAgentId: issues.reviewerAgentId,
+          reviewRequestedAt: issues.reviewRequestedAt,
           startedAt: issues.startedAt,
           completedAt: issues.completedAt,
           updatedAt: issues.updatedAt,
+          description: issues.description,
           goalId: issues.goalId,
           sprintId: issues.sprintId,
           parentId: issues.parentId,
@@ -109,13 +117,25 @@ export function dashboardService(db: Db) {
 
       // 5. Tasks in review waiting for action
       const reviewTasks = tasksByStatus.in_review.map((t) => ({
+        reviewLane: inferReviewLaneForIssue({ title: t.title, description: t.description }),
         id: t.id,
         identifier: t.identifier,
         title: t.title,
         assignee: t.assigneeAgentId ? agentNameMap[t.assigneeAgentId] ?? null : null,
         reviewer: t.reviewerAgentId ? agentNameMap[t.reviewerAgentId] ?? null : null,
+        reviewRequestedAt: t.reviewRequestedAt?.toISOString() ?? null,
         startedAt: t.startedAt?.toISOString() ?? null,
-      }));
+      })).map((row) => {
+        const slaHours = reviewSlaHoursForLane(row.reviewLane);
+        const reviewRequestedAt = row.reviewRequestedAt ? new Date(row.reviewRequestedAt) : null;
+        const slaDueAt = reviewSlaDueAtForLane(row.reviewLane, reviewRequestedAt);
+        return {
+          ...row,
+          reviewSlaHours: slaHours,
+          reviewSlaDueAt: slaDueAt?.toISOString() ?? null,
+          reviewSlaState: reviewSlaStateForDueAt(slaDueAt, now),
+        };
+      });
 
       // 6. Unassigned todo tasks
       const unassignedTasks = tasksByStatus.todo.filter(

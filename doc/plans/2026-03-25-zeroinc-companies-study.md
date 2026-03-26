@@ -51,6 +51,7 @@ Arquivo: `server/src/services/heartbeat.ts`
 3. P0.3 Contrato explícito de bloqueio humano + inbox SLA: implementado.
 4. P0.4 Guardião de ciclo de vida de processos locais: implementado (watchdog com limiares de pressão, auto-remediação de detached stale e telemetria por run/pid).
 5. P1.1 Phase Gate Engine (transições permitidas + fase explícita por task): implementado.
+6. P1.2 Reviewer specialization lanes (`code|security|ux|ops` + SLA separado): implementado.
 
 ## P0 (executar agora)
 

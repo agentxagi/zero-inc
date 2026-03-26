@@ -150,6 +150,16 @@ export const ISSUE_STATUS_TRANSITIONS: Readonly<Record<IssueStatus, readonly Iss
   cancelled: ["todo"],
 };
 
+export const REVIEW_LANES = ["code", "security", "ux", "ops"] as const;
+export type ReviewLane = (typeof REVIEW_LANES)[number];
+
+export const REVIEW_LANE_DEFAULT_SLA_HOURS: Readonly<Record<ReviewLane, number>> = {
+  code: 8,
+  security: 4,
+  ux: 12,
+  ops: 6,
+};
+
 export const ISSUE_PRIORITIES = ["critical", "high", "medium", "low"] as const;
 export type IssuePriority = (typeof ISSUE_PRIORITIES)[number];
 

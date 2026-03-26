@@ -399,6 +399,15 @@ Phase mapping (explicit in API payload as `workflowPhase`):
 - `in_review -> review`
 - `done|cancelled -> release`
 
+Review specialization lanes (auto-inferred when entering `in_review`):
+
+- `code` lane (default) -> SLA 8h
+- `security` lane (`security/auth/permission/token/...`) -> SLA 4h
+- `ux` lane (`ux/ui/design/accessibility/...`) -> SLA 12h
+- `ops` lane (`ops/infra/deploy/runtime/watchdog/...`) -> SLA 6h
+
+Lane determines reviewer role preference and dashboard SLA state (`on_track|due_soon|overdue`).
+
 ## 8.3 Approval Status
 
 - `pending -> approved | rejected | cancelled`
