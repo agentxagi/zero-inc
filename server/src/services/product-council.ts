@@ -55,6 +55,8 @@ type OutcomeMilestoneDefinition = {
   minEvidence: number;
 };
 
+type Pillar = "open_source" | "enterprise" | "operating_model";
+
 const OPERATIONS_PREFIXES = new Set(["OPS", "SYSTEM", "AUDIT", "REVIEW", "ONGOING"]);
 const ENGINEERING_PREFIXES = new Set(["BUG", "FEATURE", "CODE", "INFRA", "SHIP", "ENTERPRISE", "OPEN SOURCE", "BUILD"]);
 const QUALIFYING_WORK_PRODUCT_STATUSES = new Set(["active", "ready_for_review", "approved", "merged", "closed"]);
@@ -139,6 +141,12 @@ const OUTCOME_MILESTONES: OutcomeMilestoneDefinition[] = [
   },
 ];
 
+const MIN_EXECUTION_STOCK_BY_PILLAR: Record<Pillar, number> = {
+  open_source: 1,
+  enterprise: 1,
+  operating_model: 1,
+};
+
 const COUNCIL_TEAM_MODEL = {
   source: "companies.sh/docs",
   principles: [
@@ -206,6 +214,18 @@ function normalizeIssueText(issue: Pick<IssueLike, "title" | "description">): st
 function hasPatternMatch(issue: Pick<IssueLike, "title" | "description">, patterns: RegExp[]): boolean {
   const text = normalizeIssueText(issue);
   return patterns.some((pattern) => pattern.test(text));
+}
+
+function inferPillarFromIssue(issue: Pick<IssueLike, "title" | "description">): Pillar {
+  const text = normalizeIssueText(issue);
+  let best: { pillar: Pillar; score: number } = { pillar: "operating_model", score: 0 };
+  for (const milestone of OUTCOME_MILESTONES) {
+    const score = milestone.patterns.reduce((acc, pattern) => (pattern.test(text) ? acc + 1 : acc), 0);
+    if (score > best.score) {
+      best = { pillar: milestone.pillar, score };
+    }
+  }
+  return best.pillar;
 }
 
 function computeMilestones(doneIssues: Array<{ issue: IssueLike; evidenceText: string }>) {
@@ -484,6 +504,17 @@ export function buildProductCouncilReport(input: {
   );
   const backlogStaleCutoff = addDays(now, -3);
   const staleExecutionBacklog = executionBacklog.filter((issue) => issue.updatedAt < backlogStaleCutoff);
+  const executionPool = [...executionActive, ...executionBacklog];
+  const executionStockByPillar = executionPool.reduce<Record<Pillar, number>>(
+    (acc, issue) => {
+      const pillar = inferPillarFromIssue(issue);
+      acc[pillar] += 1;
+      return acc;
+    },
+    { open_source: 0, enterprise: 0, operating_model: 0 },
+  );
+  const missingExecutionStock = (Object.keys(MIN_EXECUTION_STOCK_BY_PILLAR) as Pillar[])
+    .filter((pillar) => executionStockByPillar[pillar] < MIN_EXECUTION_STOCK_BY_PILLAR[pillar]);
   const done24hCutoff = addDays(now, -1);
   const doneLast24h = input.goalDoneIssues.filter((issue) => issue.completedAt && issue.completedAt > done24hCutoff).length;
   const verifiedDoneLast24h = verifiedDoneEvidence.filter(
@@ -550,6 +581,7 @@ export function buildProductCouncilReport(input: {
   const proposals: Array<{
     id: string;
     sourceMilestoneId: string;
+    pillar: Pillar;
     title: string;
     description: string;
     priority: "critical" | "high" | "medium" | "low";
@@ -564,6 +596,7 @@ export function buildProductCouncilReport(input: {
     proposals.push({
       id: "stale-backlog-retriage",
       sourceMilestoneId: "ops-proactive-planning",
+      pillar: "operating_model",
       title: "[PRODUCT] Re-triagem de backlog estagnado para sprint executável",
       description:
         `Existem ${staleExecutionBacklog.length} tarefa(s) de backlog de execução sem atualização há mais de 72h. ` +
@@ -588,6 +621,7 @@ export function buildProductCouncilReport(input: {
     proposals.push({
       id: `proposal-${milestone.id}`,
       sourceMilestoneId: milestone.id,
+      pillar: milestone.pillar,
       title: blueprint.title,
       description: `${blueprint.description}\n\nContexto do council: milestone "${milestone.title}" está ${milestone.status}.`,
       priority: blueprint.priority,
@@ -599,9 +633,16 @@ export function buildProductCouncilReport(input: {
     if (proposals.length >= maxProposals) break;
   }
 
+  const stockRefillProposals = proposals.filter((proposal) => missingExecutionStock.includes(proposal.pillar));
+
   let shouldGenerate = false;
   let gateReason = "Sem propostas elegíveis.";
-  if (executionActive.length > 0) {
+  if (stockRefillProposals.length > 0) {
+    shouldGenerate = true;
+    gateReason =
+      `Estoque abaixo do mínimo por pilar (${missingExecutionStock.join(", ")}). ` +
+      "Gerar tarefas de reposição para manter fluxo contínuo.";
+  } else if (executionActive.length > 0) {
     shouldGenerate = false;
     gateReason = `Existem ${executionActive.length} tarefa(s) de execução ativa(s) (todo/in_progress/blocked).`;
   } else if (executionBacklog.length > 0 && staleExecutionBacklog.length !== executionBacklog.length) {
@@ -631,6 +672,9 @@ export function buildProductCouncilReport(input: {
       executionActive: executionActive.length,
       executionBacklog: executionBacklog.length,
       staleExecutionBacklog: staleExecutionBacklog.length,
+      executionStockByPillar,
+      executionMinStockByPillar: MIN_EXECUTION_STOCK_BY_PILLAR,
+      missingExecutionStock,
       goalOpenByStatus,
     },
     progress: {

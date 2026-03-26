@@ -77,6 +77,47 @@ describe("product-council", () => {
   });
 
   it("blocks generation while there is active execution work", () => {
+    const activeOpenSource = issue({
+      id: "open-1",
+      identifier: "VAL-2",
+      title: "[OPEN SOURCE] Refresh quickstart docs",
+      status: "in_progress",
+      completedAt: null,
+    });
+    const activeEnterprise = issue({
+      id: "open-2",
+      identifier: "VAL-3",
+      title: "[ENTERPRISE] Build enterprise auth",
+      status: "todo",
+      completedAt: null,
+    });
+    const activeOps = issue({
+      id: "open-3",
+      identifier: "VAL-4",
+      title: "[PRODUCT] Improve product council planning",
+      status: "blocked",
+      completedAt: null,
+    });
+
+    const report = buildProductCouncilReport({
+      companyId: "company-1",
+      goal: defaultGoal,
+      goalDoneIssues: [],
+      doneIssueWorkProducts: [],
+      goalOpenIssues: [activeOpenSource, activeEnterprise, activeOps],
+      companyOpenIssues: [activeOpenSource, activeEnterprise, activeOps],
+      agentRows: defaultAgents,
+      outputsLast7Days: 0,
+      now: new Date("2026-03-25T18:00:00.000Z"),
+      maxProposals: 5,
+    });
+
+    expect(report.gating.shouldGenerate).toBe(false);
+    expect(report.gating.reason).toContain("tarefa(s)");
+    expect(report.gating.reason).toContain("ativa(s)");
+  });
+
+  it("allows generation to refill missing pillar stock", () => {
     const report = buildProductCouncilReport({
       companyId: "company-1",
       goal: defaultGoal,
@@ -85,8 +126,8 @@ describe("product-council", () => {
       goalOpenIssues: [
         issue({
           id: "open-1",
-          identifier: "VAL-2",
-          title: "[FEATURE] Build enterprise auth",
+          identifier: "VAL-20",
+          title: "[ENTERPRISE] Harden auth boundaries",
           status: "in_progress",
           completedAt: null,
         }),
@@ -94,8 +135,8 @@ describe("product-council", () => {
       companyOpenIssues: [
         issue({
           id: "open-1",
-          identifier: "VAL-2",
-          title: "[FEATURE] Build enterprise auth",
+          identifier: "VAL-20",
+          title: "[ENTERPRISE] Harden auth boundaries",
           status: "in_progress",
           completedAt: null,
         }),
@@ -106,9 +147,9 @@ describe("product-council", () => {
       maxProposals: 5,
     });
 
-    expect(report.gating.shouldGenerate).toBe(false);
-    expect(report.gating.reason).toContain("tarefa(s)");
-    expect(report.gating.reason).toContain("ativa(s)");
+    expect(report.gating.shouldGenerate).toBe(true);
+    expect(report.workload.missingExecutionStock).toContain("open_source");
+    expect(report.workload.missingExecutionStock).toContain("operating_model");
   });
 
   it("generates proposals when pipeline is idle and milestones are missing", () => {
