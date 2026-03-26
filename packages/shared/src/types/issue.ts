@@ -129,6 +129,15 @@ export interface Issue {
   completedAt: Date | null;
   cancelledAt: Date | null;
   hiddenAt: Date | null;
+  blockedByHuman: boolean;
+  humanActionType: string | null;
+  humanResolutionHint: string | null;
+  humanBlockedAt: Date | null;
+  humanSlaDueAt: Date | null;
+  humanResolvedAt: Date | null;
+  humanResolutionEvidence: string | null;
+  humanResolutionByUserId: string | null;
+  humanResolutionByAgentId: string | null;
   labelIds?: string[];
   labels?: IssueLabel[];
   planDocument?: IssueDocument | null;

@@ -41,6 +41,20 @@ import { humanNotificationService } from "./human-notification.js";
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
 
+function defaultHumanSlaHours(priority: string | null | undefined): number {
+  switch ((priority ?? "").toLowerCase()) {
+    case "critical":
+      return 4;
+    case "high":
+      return 12;
+    case "low":
+      return 48;
+    case "medium":
+    default:
+      return 24;
+  }
+}
+
 function assertTransition(from: string, to: string) {
   if (from === to) return;
   if (!ALL_ISSUE_STATUSES.includes(to)) {
@@ -425,17 +439,40 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
 
       // Check current state — only act if still has requires_human label
       const current = await db
-        .select({ assigneeUserId: issues.assigneeUserId, assigneeAgentId: issues.assigneeAgentId })
+        .select({
+          assigneeUserId: issues.assigneeUserId,
+          assigneeAgentId: issues.assigneeAgentId,
+          blockedByHuman: issues.blockedByHuman,
+          humanActionType: issues.humanActionType,
+          humanResolutionHint: issues.humanResolutionHint,
+          humanBlockedAt: issues.humanBlockedAt,
+          humanSlaDueAt: issues.humanSlaDueAt,
+          priority: issues.priority,
+        })
         .from(issues)
         .where(eq(issues.id, issueId))
         .then((rows) => rows[0] ?? null);
 
       if (!current) return;
 
-      if (current.assigneeUserId !== BOARD_USER_ID) {
+      if (current.assigneeUserId !== BOARD_USER_ID || !current.blockedByHuman) {
+        const now = new Date();
+        const defaultSlaDueAt =
+          current.humanSlaDueAt ??
+          new Date(now.getTime() + defaultHumanSlaHours(current.priority) * 60 * 60 * 1000);
+
         await db.update(issues).set({
           assigneeUserId: BOARD_USER_ID,
           assigneeAgentId: null,
+          blockedByHuman: true,
+          humanActionType: current.humanActionType ?? "other",
+          humanResolutionHint: current.humanResolutionHint ?? "Human action required to continue this issue.",
+          humanBlockedAt: current.humanBlockedAt ?? now,
+          humanSlaDueAt: defaultSlaDueAt,
+          humanResolvedAt: null,
+          humanResolutionEvidence: null,
+          humanResolutionByUserId: null,
+          humanResolutionByAgentId: null,
           updatedAt: new Date(),
         }).where(eq(issues.id, issueId));
 
@@ -562,6 +599,7 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
   }
 
   async function assertAssignableUser(companyId: string, userId: string) {
+    if (userId === BOARD_USER_ID) return;
     const membership = await db
       .select({ id: companyMemberships.id })
       .from(companyMemberships)

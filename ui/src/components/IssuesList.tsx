@@ -175,6 +175,7 @@ interface IssuesListProps {
     participantAgentId?: string;
   };
   onSearchChange?: (search: string) => void;
+  preserveInputOrder?: boolean;
   onUpdateIssue: (id: string, data: Record<string, unknown>) => void;
 }
 
@@ -193,6 +194,7 @@ export function IssuesList({
   approvalIssueIds,
   searchFilters,
   onSearchChange,
+  preserveInputOrder = false,
   onUpdateIssue,
 }: IssuesListProps) {
   const { selectedCompanyId } = useCompany();
@@ -265,8 +267,8 @@ export function IssuesList({
   const filtered = useMemo(() => {
     const sourceIssues = normalizedIssueSearch.length > 0 ? searchedIssues : issues;
     const filteredByControls = applyFilters(sourceIssues, viewState, currentUserId, approvalIssueIds);
-    return sortIssues(filteredByControls, viewState);
-  }, [issues, searchedIssues, viewState, normalizedIssueSearch, currentUserId, approvalIssueIds]);
+    return preserveInputOrder ? filteredByControls : sortIssues(filteredByControls, viewState);
+  }, [issues, searchedIssues, viewState, normalizedIssueSearch, currentUserId, approvalIssueIds, preserveInputOrder]);
 
   const { data: labels } = useQuery({
     queryKey: queryKeys.issues.labels(selectedCompanyId!),

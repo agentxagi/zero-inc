@@ -25,6 +25,7 @@ import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { heartbeatsApi } from "../api/heartbeats";
 import { issuesApi } from "../api/issues";
+import { dashboardApi } from "../api/dashboard";
 import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
@@ -63,22 +64,14 @@ export function Sidebar() {
     (i) => !i.assigneeAgentId && i.assigneeUserId,
   ).length;
 
-  // Count human queue tasks (requires_human label, not done/cancelled)
-  const { data: labels } = useQuery({
-    queryKey: queryKeys.issues.labels(selectedCompanyId!),
-    queryFn: () => issuesApi.listLabels(selectedCompanyId!),
+  // Count human queue tasks from structured human handoff inbox.
+  const { data: humanQueue } = useQuery({
+    queryKey: queryKeys.dashboardHumanQueue(selectedCompanyId!),
+    queryFn: () => dashboardApi.humanQueue(selectedCompanyId!),
     enabled: !!selectedCompanyId,
-  });
-  const requiresHumanLabelId = labels?.find((l) => l.name === "requires_human")?.id;
-  const { data: humanQueueIssues } = useQuery({
-    queryKey: ["human-queue-count", selectedCompanyId, requiresHumanLabelId],
-    queryFn: () => issuesApi.list(selectedCompanyId!, { labelId: requiresHumanLabelId }),
-    enabled: !!selectedCompanyId && !!requiresHumanLabelId,
     refetchInterval: 30_000,
   });
-  const humanQueueCount = (humanQueueIssues ?? []).filter(
-    (i) => i.status !== "done" && i.status !== "cancelled",
-  ).length;
+  const humanQueueCount = humanQueue?.total ?? 0;
 
   function openSearch() {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));

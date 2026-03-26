@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocation } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
+import { dashboardApi } from "../api/dashboard";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -11,8 +12,6 @@ import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
 import { IssuesList } from "../components/IssuesList";
 import { UserCircle } from "lucide-react";
-
-const REQUIRES_HUMAN_LABEL = "requires_human";
 
 export function HumanQueue() {
   const { selectedCompanyId } = useCompany();
@@ -29,30 +28,30 @@ export function HumanQueue() {
     [location.pathname, location.search, location.hash],
   );
 
-  // Look up the requires_human label
-  const { data: labels } = useQuery({
-    queryKey: queryKeys.issues.labels(selectedCompanyId!),
-    queryFn: () => issuesApi.listLabels(selectedCompanyId!),
+  const { data: humanQueue, isLoading: isQueueLoading, error: queueError } = useQuery({
+    queryKey: queryKeys.dashboardHumanQueue(selectedCompanyId!),
+    queryFn: () => dashboardApi.humanQueue(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 30_000,
+  });
+
+  const { data: openIssues, isLoading: isIssuesLoading, error: issuesError } = useQuery({
+    queryKey: queryKeys.issues.list(selectedCompanyId!),
+    queryFn: () =>
+      issuesApi.list(selectedCompanyId!, {
+        status: "backlog,todo,in_progress,in_review,blocked",
+      }),
     enabled: !!selectedCompanyId,
   });
 
-  const requiresHumanLabelId = useMemo(
-    () => labels?.find((l) => l.name === REQUIRES_HUMAN_LABEL)?.id,
-    [labels],
-  );
-
-  // Fetch human tasks (requires_human label, not done/cancelled)
-  const { data: allHumanIssues, isLoading, error } = useQuery({
-    queryKey: ["human-queue-issues", selectedCompanyId, requiresHumanLabelId],
-    queryFn: () => issuesApi.list(selectedCompanyId!, { labelId: requiresHumanLabelId }),
-    enabled: !!selectedCompanyId && !!requiresHumanLabelId,
-  });
-
-  // Filter out done/cancelled client-side (the label filter returns all)
-  const humanIssues = useMemo(
-    () => (allHumanIssues ?? []).filter((i) => i.status !== "done" && i.status !== "cancelled"),
-    [allHumanIssues],
-  );
+  const humanIssues = useMemo(() => {
+    const orderedIds = (humanQueue?.items ?? []).map((item) => item.issueId);
+    if (orderedIds.length === 0) return [];
+    const byId = new Map((openIssues ?? []).map((issue) => [issue.id, issue]));
+    return orderedIds
+      .map((id) => byId.get(id))
+      .filter((issue): issue is NonNullable<typeof issue> => Boolean(issue));
+  }, [humanQueue, openIssues]);
 
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -79,11 +78,12 @@ export function HumanQueue() {
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
       issuesApi.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["human-queue-issues"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardHumanQueue(selectedCompanyId!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
     },
   });
 
-  useMemo(() => {
+  useEffect(() => {
     setBreadcrumbs([{ label: "Human Queue" }]);
   }, [setBreadcrumbs]);
 
@@ -91,9 +91,8 @@ export function HumanQueue() {
     return <EmptyState icon={UserCircle} message="Select a company to view human tasks." />;
   }
 
-  if (!requiresHumanLabelId) {
-    return <EmptyState icon={UserCircle} message="The 'requires_human' label has not been created yet." />;
-  }
+  const isLoading = isQueueLoading || isIssuesLoading;
+  const error = (queueError ?? issuesError) as Error | null;
 
   return (
     <IssuesList
@@ -104,6 +103,7 @@ export function HumanQueue() {
       liveIssueIds={liveIssueIds}
       viewStateKey="zeroinc:human-queue-view"
       issueLinkState={issueLinkState}
+      preserveInputOrder
       onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}
     />
   );

@@ -66,6 +66,15 @@ export const issues = pgTable(
     reviewVerdict: text("review_verdict"),
     auditFlagged: boolean("audit_flagged").notNull().default(false),
     auditFlaggedAt: timestamp("audit_flagged_at", { withTimezone: true }),
+    blockedByHuman: boolean("blocked_by_human").notNull().default(false),
+    humanActionType: text("human_action_type"),
+    humanResolutionHint: text("human_resolution_hint"),
+    humanBlockedAt: timestamp("human_blocked_at", { withTimezone: true }),
+    humanSlaDueAt: timestamp("human_sla_due_at", { withTimezone: true }),
+    humanResolvedAt: timestamp("human_resolved_at", { withTimezone: true }),
+    humanResolutionEvidence: text("human_resolution_evidence"),
+    humanResolutionByUserId: text("human_resolution_by_user_id"),
+    humanResolutionByAgentId: uuid("human_resolution_by_agent_id").references(() => agents.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -87,6 +96,12 @@ export const issues = pgTable(
     originIdx: index("issues_company_origin_idx").on(table.companyId, table.originKind, table.originId),
     projectWorkspaceIdx: index("issues_company_project_workspace_idx").on(table.companyId, table.projectWorkspaceId),
     executionWorkspaceIdx: index("issues_company_execution_workspace_idx").on(table.companyId, table.executionWorkspaceId),
+    humanQueueIdx: index("issues_company_human_queue_idx").on(
+      table.companyId,
+      table.blockedByHuman,
+      table.status,
+      table.humanSlaDueAt,
+    ),
     identifierIdx: uniqueIndex("issues_identifier_idx").on(table.identifier),
     openRoutineExecutionIdx: uniqueIndex("issues_open_routine_execution_uq")
       .on(table.companyId, table.originKind, table.originId)

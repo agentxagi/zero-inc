@@ -137,6 +137,38 @@ export const upsertIssueDocumentSchema = z.object({
 export type IssueDocumentFormat = z.infer<typeof issueDocumentFormatSchema>;
 export type UpsertIssueDocument = z.infer<typeof upsertIssueDocumentSchema>;
 
+export const HUMAN_ACTION_TYPES = [
+  "approval",
+  "credential",
+  "external_access",
+  "decision",
+  "manual_execution",
+  "legal",
+  "billing",
+  "other",
+] as const;
+
+export const issueHumanActionTypeSchema = z.enum(HUMAN_ACTION_TYPES);
+
+export const issueHumanHandoffActionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("block"),
+    humanActionType: issueHumanActionTypeSchema,
+    resolutionHint: z.string().trim().min(5).max(2000),
+    slaHours: z.number().int().positive().max(336).optional(),
+    comment: z.string().trim().max(4000).optional().nullable(),
+  }),
+  z.object({
+    action: z.literal("resolve"),
+    resolutionEvidence: z.string().trim().min(3).max(4000),
+    nextStatus: z.enum(["todo", "in_review", "done", "cancelled"]).optional(),
+    comment: z.string().trim().max(4000).optional().nullable(),
+  }),
+]);
+
+export type IssueHumanActionType = z.infer<typeof issueHumanActionTypeSchema>;
+export type IssueHumanHandoffAction = z.infer<typeof issueHumanHandoffActionSchema>;
+
 // ---------------------------------------------------------------------------
 // Quality Gate Configuration
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
-import { agents, issues } from "@zeroinc/db";
+import { agents, issueLabels, issues, labels } from "@zeroinc/db";
 import { dashboardService } from "../services/dashboard.js";
 import { productCouncilService } from "../services/product-council.js";
 import { issueService } from "../services/issues.js";
@@ -29,6 +29,35 @@ function setCache(key: string, data: unknown): void {
   cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
+function priorityRank(priority: string | null | undefined): number {
+  switch ((priority ?? "").toLowerCase()) {
+    case "critical":
+      return 0;
+    case "high":
+      return 1;
+    case "medium":
+      return 2;
+    case "low":
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+function slaStateForDueAt(dueAt: Date | null) {
+  if (!dueAt) {
+    return { state: "no_sla" as const, minutesRemaining: null as number | null };
+  }
+  const minutesRemaining = Math.floor((dueAt.getTime() - Date.now()) / (60 * 1000));
+  if (minutesRemaining < 0) {
+    return { state: "overdue" as const, minutesRemaining };
+  }
+  if (minutesRemaining <= 120) {
+    return { state: "due_soon" as const, minutesRemaining };
+  }
+  return { state: "on_track" as const, minutesRemaining };
+}
+
 export function dashboardRoutes(db: Db) {
   const router = Router();
   const svc = dashboardService(db);
@@ -41,6 +70,115 @@ export function dashboardRoutes(db: Db) {
     assertCompanyAccess(req, companyId);
     const summary = await svc.summary(companyId);
     res.json(summary);
+  });
+
+  /**
+   * GET /api/dashboard/companies/:companyId/human-queue
+   * Dedicated human inbox sorted by SLA/impact for explicit human handoff tasks.
+   */
+  router.get("/companies/:companyId/human-queue", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    const requiresHumanLabelIds = await db
+      .select({ id: labels.id })
+      .from(labels)
+      .where(and(eq(labels.companyId, companyId), sql`lower(${labels.name}) = 'requires_human'`))
+      .then((rows) => rows.map((row) => row.id));
+
+    const labeledIssueIds = requiresHumanLabelIds.length > 0
+      ? await db
+        .select({ issueId: issueLabels.issueId })
+        .from(issueLabels)
+        .where(and(eq(issueLabels.companyId, companyId), inArray(issueLabels.labelId, requiresHumanLabelIds)))
+        .then((rows) => rows.map((row) => row.issueId))
+      : [];
+
+    const humanCondition = labeledIssueIds.length > 0
+      ? or(eq(issues.blockedByHuman, true), inArray(issues.id, labeledIssueIds))
+      : eq(issues.blockedByHuman, true);
+
+    const openIssues = await db
+      .select({
+        id: issues.id,
+        identifier: issues.identifier,
+        title: issues.title,
+        status: issues.status,
+        priority: issues.priority,
+        assigneeAgentId: issues.assigneeAgentId,
+        assigneeUserId: issues.assigneeUserId,
+        humanActionType: issues.humanActionType,
+        humanResolutionHint: issues.humanResolutionHint,
+        humanBlockedAt: issues.humanBlockedAt,
+        humanSlaDueAt: issues.humanSlaDueAt,
+        updatedAt: issues.updatedAt,
+      })
+      .from(issues)
+      .where(
+        and(
+          eq(issues.companyId, companyId),
+          isNull(issues.hiddenAt),
+          sql`${issues.status} in ('backlog','todo','in_progress','in_review','blocked')`,
+          humanCondition,
+        ),
+      )
+      .orderBy(desc(issues.updatedAt))
+      .limit(300);
+
+    const requiresHumanIssueIdSet = new Set(labeledIssueIds);
+    const withSla = openIssues.map((row) => {
+      const sla = slaStateForDueAt(row.humanSlaDueAt);
+      return {
+        issueId: row.id,
+        identifier: row.identifier,
+        title: row.title,
+        status: row.status,
+        priority: row.priority,
+        assigneeAgentId: row.assigneeAgentId,
+        assigneeUserId: row.assigneeUserId,
+        humanActionType: row.humanActionType,
+        humanResolutionHint: row.humanResolutionHint,
+        humanBlockedAt: row.humanBlockedAt,
+        humanSlaDueAt: row.humanSlaDueAt,
+        slaState: sla.state,
+        slaMinutesRemaining: sla.minutesRemaining,
+        requiresHumanLabel: requiresHumanIssueIdSet.has(row.id),
+        updatedAt: row.updatedAt,
+      };
+    });
+
+    const slaRank: Record<"overdue" | "due_soon" | "on_track" | "no_sla", number> = {
+      overdue: 0,
+      due_soon: 1,
+      on_track: 2,
+      no_sla: 3,
+    };
+    withSla.sort((left, right) => {
+      const leftRank = slaRank[left.slaState];
+      const rightRank = slaRank[right.slaState];
+      if (leftRank !== rightRank) return leftRank - rightRank;
+
+      const leftDue = left.humanSlaDueAt?.getTime() ?? Number.POSITIVE_INFINITY;
+      const rightDue = right.humanSlaDueAt?.getTime() ?? Number.POSITIVE_INFINITY;
+      if (leftDue !== rightDue) return leftDue - rightDue;
+
+      const leftPriority = priorityRank(left.priority);
+      const rightPriority = priorityRank(right.priority);
+      if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+
+      return right.updatedAt.getTime() - left.updatedAt.getTime();
+    });
+
+    const response = {
+      companyId,
+      generatedAt: new Date(),
+      total: withSla.length,
+      overdue: withSla.filter((item) => item.slaState === "overdue").length,
+      dueSoon: withSla.filter((item) => item.slaState === "due_soon").length,
+      items: withSla.map(({ updatedAt: _updatedAt, ...item }) => item),
+    };
+
+    res.json(response);
   });
 
   /**

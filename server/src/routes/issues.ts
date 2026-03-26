@@ -8,6 +8,7 @@ import {
   createIssueLabelSchema,
   checkoutIssueSchema,
   createIssueSchema,
+  issueHumanHandoffActionSchema,
   linkIssueApprovalSchema,
   listIssuesQuerySchema,
   issueDocumentKeySchema,
@@ -42,6 +43,22 @@ import { isAllowedContentType, MAX_ATTACHMENT_BYTES } from "../attachment-types.
 import { queueIssueAssignmentWakeup } from "../services/issue-assignment-wakeup.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
+const REQUIRES_HUMAN_LABEL_NAME = "requires_human";
+const BOARD_USER_ID = "local-board";
+
+function defaultHumanSlaHours(priority: string): number {
+  switch (priority) {
+    case "critical":
+      return 4;
+    case "high":
+      return 12;
+    case "low":
+      return 48;
+    case "medium":
+    default:
+      return 24;
+  }
+}
 
 export function issueRoutes(db: Db, storage: StorageService) {
   const router = Router();
@@ -117,6 +134,17 @@ export function issueRoutes(db: Db, storage: StorageService) {
       throw forbidden("Missing permission: tasks:assign");
     }
     throw unauthorized();
+  }
+
+  async function ensureRequiresHumanLabel(companyId: string) {
+    const existing = (await svc.listLabels(companyId)).find(
+      (label) => label.name.trim().toLowerCase() === REQUIRES_HUMAN_LABEL_NAME,
+    );
+    if (existing) return existing;
+    return svc.createLabel(companyId, {
+      name: REQUIRES_HUMAN_LABEL_NAME,
+      color: "#ef4444",
+    });
   }
 
   function requireAgentRunId(req: Request, res: Response) {
@@ -456,6 +484,170 @@ export function issueRoutes(db: Db, storage: StorageService) {
     assertCompanyAccess(req, issue.companyId);
     const workProducts = await workProductsSvc.listForIssue(issue.id);
     res.json(workProducts);
+  });
+
+  router.post("/issues/:id/human-handoff", validate(issueHumanHandoffActionSchema), async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const actor = getActorInfo(req);
+    const existingLabelIds = [
+      ...new Set([...(existing.labelIds ?? []), ...(existing.labels ?? []).map((label) => label.id)]),
+    ];
+    const hasRequiresHumanLabel = (existing.labels ?? []).some(
+      (label) => label.name.trim().toLowerCase() === REQUIRES_HUMAN_LABEL_NAME,
+    );
+
+    if (req.body.action === "block") {
+      if (existing.status === "done" || existing.status === "cancelled") {
+        res.status(409).json({ error: "Closed issues cannot be blocked by human handoff" });
+        return;
+      }
+      if (
+        req.actor.type === "agent" &&
+        (!req.actor.agentId || req.actor.agentId !== existing.assigneeAgentId)
+      ) {
+        res.status(403).json({ error: "Only the current assignee agent can escalate to human handoff" });
+        return;
+      }
+
+      const requiresHumanLabel = await ensureRequiresHumanLabel(existing.companyId);
+      const nextLabelIds = [...new Set([...existingLabelIds, requiresHumanLabel.id])];
+      const now = new Date();
+      const slaHours = req.body.slaHours ?? defaultHumanSlaHours(existing.priority);
+      const humanSlaDueAt = new Date(now.getTime() + slaHours * 60 * 60 * 1000);
+
+      const updated = await svc.update(id, {
+        status: existing.status === "blocked" ? existing.status : "blocked",
+        assigneeAgentId: null,
+        assigneeUserId: BOARD_USER_ID,
+        blockedByHuman: true,
+        humanActionType: req.body.humanActionType,
+        humanResolutionHint: req.body.resolutionHint,
+        humanBlockedAt: now,
+        humanSlaDueAt,
+        humanResolvedAt: null,
+        humanResolutionEvidence: null,
+        humanResolutionByUserId: null,
+        humanResolutionByAgentId: null,
+        labelIds: nextLabelIds,
+      });
+      if (!updated) {
+        res.status(404).json({ error: "Issue not found" });
+        return;
+      }
+
+      const commentLines = [
+        "## Human Handoff Requested",
+        "",
+        `Action type: \`${req.body.humanActionType}\``,
+        `Resolution hint: ${req.body.resolutionHint}`,
+        `SLA target: ${humanSlaDueAt.toISOString()}`,
+      ];
+      if (req.body.comment && req.body.comment.trim().length > 0) {
+        commentLines.push("", req.body.comment.trim());
+      }
+      const comment = await svc.addComment(id, commentLines.join("\n"), {
+        agentId: actor.agentId ?? undefined,
+        userId: actor.actorType === "user" ? actor.actorId : undefined,
+      });
+
+      await logActivity(db, {
+        companyId: existing.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "issue.human_handoff_blocked",
+        entityType: "issue",
+        entityId: existing.id,
+        details: {
+          identifier: existing.identifier,
+          humanActionType: req.body.humanActionType,
+          humanResolutionHint: req.body.resolutionHint,
+          humanSlaDueAt: humanSlaDueAt.toISOString(),
+          commentId: comment.id,
+        },
+      });
+
+      res.json({ issue: updated, comment });
+      return;
+    }
+
+    if (req.actor.type !== "board") {
+      res.status(403).json({ error: "Board authentication required to resolve human handoff" });
+      return;
+    }
+    if (!existing.blockedByHuman && !hasRequiresHumanLabel) {
+      res.status(409).json({ error: "Issue is not currently blocked by human handoff" });
+      return;
+    }
+
+    const requiresHumanLabel = (await svc.listLabels(existing.companyId)).find(
+      (label) => label.name.trim().toLowerCase() === REQUIRES_HUMAN_LABEL_NAME,
+    );
+    const nextLabelIds =
+      requiresHumanLabel
+        ? existingLabelIds.filter((labelId) => labelId !== requiresHumanLabel.id)
+        : existingLabelIds;
+
+    const nextStatus =
+      req.body.nextStatus ?? (existing.status === "blocked" ? "todo" : undefined);
+    const now = new Date();
+    const updated = await svc.update(id, {
+      ...(nextStatus ? { status: nextStatus } : {}),
+      ...(nextStatus === "todo" || nextStatus === "in_review"
+        ? { assigneeUserId: null, assigneeAgentId: null }
+        : {}),
+      blockedByHuman: false,
+      humanResolvedAt: now,
+      humanResolutionEvidence: req.body.resolutionEvidence,
+      humanResolutionByUserId: actor.actorType === "user" ? actor.actorId : null,
+      humanResolutionByAgentId: actor.agentId ?? null,
+      labelIds: nextLabelIds,
+    });
+    if (!updated) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+
+    const resolutionLines = [
+      "## Human Handoff Resolved",
+      "",
+      `Resolution evidence: ${req.body.resolutionEvidence}`,
+      ...(nextStatus ? [`Next status: \`${nextStatus}\``] : []),
+    ];
+    if (req.body.comment && req.body.comment.trim().length > 0) {
+      resolutionLines.push("", req.body.comment.trim());
+    }
+    const comment = await svc.addComment(id, resolutionLines.join("\n"), {
+      agentId: actor.agentId ?? undefined,
+      userId: actor.actorType === "user" ? actor.actorId : undefined,
+    });
+
+    await logActivity(db, {
+      companyId: existing.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "issue.human_handoff_resolved",
+      entityType: "issue",
+      entityId: existing.id,
+      details: {
+        identifier: existing.identifier,
+        nextStatus: nextStatus ?? null,
+        humanResolvedAt: now.toISOString(),
+        commentId: comment.id,
+      },
+    });
+
+    res.json({ issue: updated, comment });
   });
 
   router.get("/issues/:id/documents", async (req, res) => {
@@ -844,11 +1036,28 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
     assertCompanyAccess(req, existing.companyId);
 
+    const isTerminalTransition = req.body.status === "done" || req.body.status === "cancelled";
+    if (isTerminalTransition) {
+      const hasRequiresHumanLabel = (existing as any).labels?.some(
+        (l: any) => l.name.toLowerCase() === REQUIRES_HUMAN_LABEL_NAME,
+      );
+      const hasResolutionEvidence = Boolean(existing.humanResolutionEvidence?.trim());
+      const unresolvedHumanBlock =
+        Boolean(existing.blockedByHuman) || Boolean(hasRequiresHumanLabel);
+      if (unresolvedHumanBlock && !hasResolutionEvidence) {
+        res.status(409).json({
+          error:
+            "Issue requires human resolution evidence before closing. Resolve via /api/issues/:id/human-handoff action=resolve.",
+        });
+        return;
+      }
+    }
+
     // Block agents from marking requires_human issues as done
     if (
       req.body.status === "done" &&
       req.actor.type === "agent" &&
-      (existing as any).labels?.some((l: any) => l.name.toLowerCase() === "requires_human")
+      (existing as any).labels?.some((l: any) => l.name.toLowerCase() === REQUIRES_HUMAN_LABEL_NAME)
     ) {
       res.status(403).json({ error: "Agents cannot mark human-only tasks as done. A human must verify and close this task." });
       return;
