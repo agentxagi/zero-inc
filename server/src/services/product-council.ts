@@ -73,6 +73,68 @@ type OutcomeMilestoneDefinition = {
 };
 
 type Pillar = "open_source" | "enterprise" | "operating_model";
+type ValueDeliveryStatus = "critical" | "weak" | "moderate" | "strong";
+type DoneEvidenceRow = {
+  issue: IssueLike;
+  evidenceText: string;
+  verified: boolean;
+};
+
+type ProposalPriority = "critical" | "high" | "medium" | "low";
+
+export type ProductCouncilProposal = {
+  id: string;
+  sourceMilestoneId: string;
+  pillar: Pillar;
+  title: string;
+  description: string;
+  priority: ProposalPriority;
+  suggestedOwnerRole: string | null;
+  suggestedAssigneeAgentId: string | null;
+  suggestedAssigneeName: string | null;
+  definitionOfDone: string[];
+};
+
+type DebateStance = "support" | "support_with_changes" | "block";
+type DebateConsensus = "go" | "revise" | "hold";
+
+type ProposalDebateSpeaker = {
+  role: "pm" | "cto" | "qa" | "researcher";
+  speaker: string;
+  stance: DebateStance;
+  rationale: string;
+  mustHave: string[];
+};
+
+export type ProductCouncilProposalDebate = {
+  proposalId: string;
+  requiresDebate: boolean;
+  consensus: DebateConsensus;
+  confidence: number;
+  summary: string;
+  speakers: ProposalDebateSpeaker[];
+};
+
+export type ProductCouncilValueDelivery = {
+  windowDays: number;
+  score: number;
+  status: ValueDeliveryStatus;
+  totalDoneLast7Days: number;
+  verifiedDoneLast7Days: number;
+  opsDoneLast7Days: number;
+  opsSharePercent: number;
+  outputsLast7Days: number;
+  pillarCoveragePercent: number;
+  pillarsWithVerifiedDelivery: Record<Pillar, number>;
+  components: {
+    throughputScore: number;
+    verificationScore: number;
+    coverageScore: number;
+    reviewScore: number;
+    evidenceScore: number;
+    opsPenalty: number;
+  };
+};
 
 const OPERATIONS_PREFIXES = new Set(["OPS", "SYSTEM", "AUDIT", "REVIEW", "ONGOING"]);
 const ENGINEERING_PREFIXES = new Set(["BUG", "FEATURE", "CODE", "INFRA", "SHIP", "ENTERPRISE", "OPEN SOURCE", "BUILD"]);
@@ -182,6 +244,10 @@ function toIso(value: Date | null | undefined): string | null {
 
 function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function extractPrefix(title: string): string | null {
@@ -430,6 +496,199 @@ const PROPOSAL_BLUEPRINTS: Record<string, ProposalBlueprint> = {
   },
 };
 
+const HIGH_RISK_DEBATE_PATTERNS = [
+  /\bauth\b/i,
+  /\bsecurity\b/i,
+  /\bdeploy(ment)?\b/i,
+  /\bmigration\b/i,
+  /\bmulti[- ]company\b/i,
+  /\btenant\b/i,
+  /\bbudget\b/i,
+  /\bapproval\b/i,
+  /\bruntime\b/i,
+];
+
+function priorityRank(priority: ProposalPriority): number {
+  if (priority === "critical") return 0;
+  if (priority === "high") return 1;
+  if (priority === "medium") return 2;
+  return 3;
+}
+
+function requiresSpecialistDebate(proposal: ProductCouncilProposal): boolean {
+  if (priorityRank(proposal.priority) <= 1) return true;
+  if (proposal.pillar === "enterprise") return true;
+  return false;
+}
+
+function proposalRiskSignals(proposal: ProductCouncilProposal): {
+  isHighRisk: boolean;
+  hasStrongDefinitionOfDone: boolean;
+  hasOwner: boolean;
+} {
+  const text = `${proposal.title}\n${proposal.description}`;
+  return {
+    isHighRisk: HIGH_RISK_DEBATE_PATTERNS.some((pattern) => pattern.test(text)),
+    hasStrongDefinitionOfDone: proposal.definitionOfDone.length >= 3,
+    hasOwner: Boolean(proposal.suggestedOwnerRole),
+  };
+}
+
+function buildProposalDebate(
+  proposal: ProductCouncilProposal,
+  agentRows: AgentLike[],
+  context: { outputsLast7Days: number },
+): ProductCouncilProposalDebate {
+  const requiresDebate = requiresSpecialistDebate(proposal);
+  const { isHighRisk, hasStrongDefinitionOfDone, hasOwner } = proposalRiskSignals(proposal);
+  const pm = pickAgentByRole(agentRows, ["pm"]);
+  const cto = pickAgentByRole(agentRows, ["cto", "engineer"]);
+  const qa = pickAgentByRole(agentRows, ["qa", "reviewer"]);
+  const researcher = pickAgentByRole(agentRows, ["researcher", "pm"]);
+
+  const speakers: ProposalDebateSpeaker[] = [
+    {
+      role: "pm",
+      speaker: pm?.name ?? "PM",
+      stance: hasOwner ? "support" : "support_with_changes",
+      rationale: hasOwner
+        ? "Escopo e ownership estão claros para execução."
+        : "Falta owner explícito para reduzir risco de re-triagem.",
+      mustHave: hasOwner ? [] : ["Definir owner principal antes da execução."],
+    },
+    {
+      role: "cto",
+      speaker: cto?.name ?? "CTO",
+      stance: isHighRisk ? "support_with_changes" : "support",
+      rationale: isHighRisk
+        ? "Mudança com superfície técnica sensível; precisa checklist técnico."
+        : "Mudança com risco técnico moderado e viável no ciclo atual.",
+      mustHave: isHighRisk
+        ? ["Adicionar plano técnico de rollback e verificação de regressão."]
+        : [],
+    },
+    {
+      role: "qa",
+      speaker: qa?.name ?? "QA",
+      stance: hasStrongDefinitionOfDone ? "support" : "block",
+      rationale: hasStrongDefinitionOfDone
+        ? "Definition of Done suficiente para validar qualidade da entrega."
+        : "Definition of Done insuficiente para impedir conclusão sem evidência.",
+      mustHave: hasStrongDefinitionOfDone
+        ? []
+        : ["Expandir DoD com critérios de verificação explícitos (teste/log/prova)."],
+    },
+    {
+      role: "researcher",
+      speaker: researcher?.name ?? "Researcher",
+      stance: context.outputsLast7Days > 0 ? "support" : "support_with_changes",
+      rationale: context.outputsLast7Days > 0
+        ? "Há evidências recentes de entrega para ancorar a próxima hipótese."
+        : "Sem outputs recentes; incluir hipótese mensurável para evitar tarefa vaga.",
+      mustHave: context.outputsLast7Days > 0
+        ? []
+        : ["Definir métrica de impacto observável para esta proposta."],
+    },
+  ];
+
+  const blocks = speakers.filter((s) => s.stance === "block").length;
+  const adjustments = speakers.filter((s) => s.stance === "support_with_changes").length;
+  const supports = speakers.filter((s) => s.stance === "support").length;
+  const consensus: DebateConsensus =
+    blocks > 0 ? "hold" : adjustments > 0 ? "revise" : "go";
+  const confidenceRaw = 80 + supports * 4 - adjustments * 6 - blocks * 20;
+  const confidence = Math.max(10, Math.min(95, confidenceRaw));
+  const summary =
+    consensus === "go"
+      ? "Consenso favorável para execução imediata."
+      : consensus === "revise"
+        ? "Consenso favorável com ajustes obrigatórios antes da execução."
+        : "Consenso indica pausa: critérios mínimos de qualidade não atendidos.";
+
+  return {
+    proposalId: proposal.id,
+    requiresDebate,
+    consensus,
+    confidence,
+    summary,
+    speakers,
+  };
+}
+
+function computeValueDelivery(input: {
+  doneEvidence: DoneEvidenceRow[];
+  reviewCoveragePercent: number | null;
+  outputsLast7Days: number;
+  now: Date;
+}): ProductCouncilValueDelivery {
+  const windowDays = 7;
+  const cutoff = addDays(input.now, -windowDays);
+  const doneLast7Days = input.doneEvidence.filter(
+    (entry) => entry.issue.completedAt && entry.issue.completedAt > cutoff,
+  );
+  const verifiedDoneLast7Days = doneLast7Days.filter((entry) => entry.verified);
+  const pillarsWithVerifiedDelivery = verifiedDoneLast7Days.reduce<Record<Pillar, number>>(
+    (acc, entry) => {
+      const pillar = inferPillarFromIssue(entry.issue);
+      acc[pillar] += 1;
+      return acc;
+    },
+    { open_source: 0, enterprise: 0, operating_model: 0 },
+  );
+  const coveredPillars = (Object.keys(pillarsWithVerifiedDelivery) as Pillar[]).filter(
+    (pillar) => pillarsWithVerifiedDelivery[pillar] > 0,
+  ).length;
+  const pillarCoveragePercent = Math.round((coveredPillars / 3) * 100);
+  const opsDoneLast7Days = doneLast7Days.filter((entry) => isOperationalNoiseIssue(entry.issue)).length;
+  const totalDoneLast7Days = doneLast7Days.length;
+  const verifiedCount = verifiedDoneLast7Days.length;
+  const verificationScore = totalDoneLast7Days > 0
+    ? Math.round((verifiedCount / totalDoneLast7Days) * 100)
+    : 0;
+  const throughputScore = clamp(verifiedCount * 20, 0, 100);
+  const coverageScore = clamp(pillarCoveragePercent, 0, 100);
+  const reviewScore = clamp(input.reviewCoveragePercent ?? 0, 0, 100);
+  const evidenceScore = clamp(input.outputsLast7Days * 10, 0, 100);
+  const opsSharePercent = totalDoneLast7Days > 0
+    ? Math.round((opsDoneLast7Days / totalDoneLast7Days) * 100)
+    : 0;
+  const opsPenalty = Math.round((opsSharePercent / 100) * 35);
+  const weighted = Math.round(
+    throughputScore * 0.30 +
+    verificationScore * 0.25 +
+    coverageScore * 0.20 +
+    reviewScore * 0.15 +
+    evidenceScore * 0.10,
+  );
+  const score = clamp(weighted - opsPenalty, 0, 100);
+
+  let status: ValueDeliveryStatus = "critical";
+  if (score >= 75) status = "strong";
+  else if (score >= 50) status = "moderate";
+  else if (score >= 30) status = "weak";
+
+  return {
+    windowDays,
+    score,
+    status,
+    totalDoneLast7Days,
+    verifiedDoneLast7Days: verifiedCount,
+    opsDoneLast7Days,
+    opsSharePercent,
+    outputsLast7Days: input.outputsLast7Days,
+    pillarCoveragePercent,
+    pillarsWithVerifiedDelivery,
+    components: {
+      throughputScore,
+      verificationScore,
+      coverageScore,
+      reviewScore,
+      evidenceScore,
+      opsPenalty,
+    },
+  };
+}
+
 function hasOpenIssueForKeywords(openIssues: IssueLike[], keywords: string[]): boolean {
   return openIssues.some((issue) => {
     const text = normalizeIssueText(issue);
@@ -476,7 +735,7 @@ export function buildProductCouncilReport(input: {
     else workProductsByIssueId.set(product.issueId, [product]);
   }
 
-  const doneEvidence = input.goalDoneIssues.map((issue) => {
+  const doneEvidence: DoneEvidenceRow[] = input.goalDoneIssues.map((issue) => {
     const qualifyingWorkProducts = (workProductsByIssueId.get(issue.id) ?? []).filter(qualifiesWorkProduct);
     const hasQualifyingWorkProduct = qualifyingWorkProducts.length > 0;
     const requiresReview = isEngineeringOutcomeIssue(issue);
@@ -550,6 +809,12 @@ export function buildProductCouncilReport(input: {
   const reviewCoveragePercent = totalEngineeringDone > 0
     ? Math.round((reviewedEngineeringDone / totalEngineeringDone) * 100)
     : null;
+  const valueDelivery = computeValueDelivery({
+    doneEvidence,
+    reviewCoveragePercent,
+    outputsLast7Days: input.outputsLast7Days,
+    now,
+  });
 
   const pmAgent = pickAgentByRole(input.agentRows, ["pm"]);
   const ctoAgent = pickAgentByRole(input.agentRows, ["cto", "engineer"]);
@@ -591,9 +856,13 @@ export function buildProductCouncilReport(input: {
           ? "Sem amostra suficiente de tarefas de engenharia concluídas para medir cobertura de review."
           : `Cobertura de review em tarefas de engenharia concluídas: ${reviewCoveragePercent}%.`,
       concerns: [
+        `Score semanal de valor entregue: ${valueDelivery.score}/100 (${valueDelivery.status}).`,
         input.outputsLast7Days > 0
           ? `${input.outputsLast7Days} artefatos encontrados em /opt/paperclip/outputs nos últimos 7 dias.`
           : "Nenhum artefato encontrado em /opt/paperclip/outputs nos últimos 7 dias.",
+        valueDelivery.totalDoneLast7Days > 0
+          ? `${valueDelivery.opsSharePercent}% das concluídas da semana foram OPS/meta-task.`
+          : "Sem tarefas concluídas na janela semanal para medir share de OPS.",
         unverifiedDoneEvidence.length > 0
           ? `${unverifiedDoneEvidence.length} tarefa(s) concluída(s) sem work product qualificado.`
           : "Todas as tarefas concluídas no escopo possuem work product qualificado.",
@@ -602,18 +871,7 @@ export function buildProductCouncilReport(input: {
     },
   ];
 
-  const proposals: Array<{
-    id: string;
-    sourceMilestoneId: string;
-    pillar: Pillar;
-    title: string;
-    description: string;
-    priority: "critical" | "high" | "medium" | "low";
-    suggestedOwnerRole: string | null;
-    suggestedAssigneeAgentId: string | null;
-    suggestedAssigneeName: string | null;
-    definitionOfDone: string[];
-  }> = [];
+  const proposals: ProductCouncilProposal[] = [];
   const isExecutionStagnant =
     executionActive.length > 0 &&
     staleExecutionActive.length === executionActive.length &&
@@ -694,6 +952,17 @@ export function buildProductCouncilReport(input: {
   }
   const opsProposalsSkipped = proposals.length - proposalsWithOpsLimit.length;
   const stockRefillProposals = proposalsWithOpsLimit.filter((proposal) => missingExecutionStock.includes(proposal.pillar));
+  const proposalDebates = proposalsWithOpsLimit
+    .filter((proposal) => requiresSpecialistDebate(proposal))
+    .map((proposal) => buildProposalDebate(proposal, input.agentRows, {
+      outputsLast7Days: input.outputsLast7Days,
+    }));
+  const debateSummary = {
+    reviewed: proposalDebates.length,
+    go: proposalDebates.filter((debate) => debate.consensus === "go").length,
+    revise: proposalDebates.filter((debate) => debate.consensus === "revise").length,
+    hold: proposalDebates.filter((debate) => debate.consensus === "hold").length,
+  };
 
   let shouldGenerate = false;
   let gateReason = "Sem propostas elegíveis.";
@@ -750,6 +1019,7 @@ export function buildProductCouncilReport(input: {
       issueBasedPercent,
       rawIssueBasedPercent,
       outcomeBasedPercent: milestoneSummary.completionPercent,
+      weeklyValueScore: valueDelivery.score,
       doneIssues: verifiedDoneEvidence.length,
       rawDoneIssues: input.goalDoneIssues.length,
       unverifiedDoneIssues: unverifiedDoneEvidence.length,
@@ -759,6 +1029,7 @@ export function buildProductCouncilReport(input: {
       reviewCoveragePercent,
       outputsLast7Days: input.outputsLast7Days,
     },
+    valueDelivery,
     milestones: milestoneSummary.rows,
     councilDiscussion,
     gating: {
@@ -772,6 +1043,11 @@ export function buildProductCouncilReport(input: {
       staleExecutionActive: staleExecutionActive.length,
       forcedByAntiLoop,
       opsProposalsSkipped,
+    },
+    proposalDebate: {
+      enabled: true,
+      summary: debateSummary,
+      items: proposalDebates,
     },
     proposals: proposalsWithOpsLimit,
   };

@@ -54,6 +54,8 @@ Arquivo: `server/src/services/heartbeat.ts`
 6. P1.2 Reviewer specialization lanes (`code|security|ux|ops` + SLA separado): implementado.
 7. P1.3 PM anti-loop hardening (estagnação força geração + limite de OPS meta-task por ciclo): implementado.
 8. P2.1 Programas permanentes por objetivo macro (Open Source, Enterprise, Operating Model + ciclos trimestrais): implementado.
+9. P2.2 Debate curto entre especialistas (PM/CTO/QA/Researcher) para propostas críticas/altas: implementado.
+10. P2.3 Métrica semanal de valor entregue (`valueDelivery` score 0-100 com penalidade de OPS/meta): implementado.
 
 ## P0 (executar agora)
 

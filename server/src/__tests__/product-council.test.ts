@@ -217,6 +217,8 @@ describe("product-council", () => {
     expect(report.proposals.length).toBeGreaterThan(0);
     expect(report.proposals.length).toBeLessThanOrEqual(3);
     expect(report.progress.outcomeBasedPercent).toBe(0);
+    expect(report.valueDelivery.score).toBe(0);
+    expect(report.valueDelivery.status).toBe("critical");
   });
 
   it("limits operating-model proposals to reduce repeated OPS meta-task loops", () => {
@@ -235,6 +237,73 @@ describe("product-council", () => {
 
     const opsProposals = report.proposals.filter((proposal) => proposal.pillar === "operating_model");
     expect(opsProposals.length).toBeLessThanOrEqual(1);
+  });
+
+  it("builds specialist debate output for proposals that require deeper review", () => {
+    const report = buildProductCouncilReport({
+      companyId: "company-1",
+      goal: defaultGoal,
+      goalDoneIssues: [],
+      doneIssueWorkProducts: [],
+      goalOpenIssues: [],
+      companyOpenIssues: [],
+      agentRows: defaultAgents,
+      outputsLast7Days: 0,
+      now: new Date("2026-03-25T18:00:00.000Z"),
+      maxProposals: 5,
+    });
+
+    expect(report.proposalDebate.enabled).toBe(true);
+    expect(report.proposalDebate.summary.reviewed).toBeGreaterThan(0);
+    expect(report.proposalDebate.items.every((item) => item.requiresDebate)).toBe(true);
+    expect(report.proposalDebate.items.some((item) => item.consensus === "revise" || item.consensus === "go")).toBe(true);
+  });
+
+  it("computes weekly delivered-value score with ops noise penalty", () => {
+    const report = buildProductCouncilReport({
+      companyId: "company-1",
+      goal: defaultGoal,
+      goalDoneIssues: [
+        issue({
+          id: "done-1",
+          identifier: "VAL-60",
+          title: "[OPEN SOURCE] Improve quickstart docs",
+          reviewCount: 1,
+          completedAt: new Date("2026-03-25T17:30:00.000Z"),
+        }),
+        issue({
+          id: "done-2",
+          identifier: "VAL-61",
+          title: "[ENTERPRISE] Harden auth boundaries",
+          reviewCount: 1,
+          completedAt: new Date("2026-03-24T17:30:00.000Z"),
+        }),
+        issue({
+          id: "done-3",
+          identifier: "VAL-62",
+          title: "[OPS] Reconcile stale review locks",
+          reviewCount: 0,
+          completedAt: new Date("2026-03-24T16:30:00.000Z"),
+        }),
+      ],
+      doneIssueWorkProducts: [
+        workProduct({ issueId: "done-1", status: "approved" }),
+        workProduct({ issueId: "done-2", status: "approved" }),
+        workProduct({ issueId: "done-3", status: "approved" }),
+      ],
+      goalOpenIssues: [],
+      companyOpenIssues: [],
+      agentRows: defaultAgents,
+      outputsLast7Days: 3,
+      now: new Date("2026-03-25T18:00:00.000Z"),
+      maxProposals: 5,
+    });
+
+    expect(report.valueDelivery.score).toBeGreaterThan(0);
+    expect(report.valueDelivery.status).toBe("moderate");
+    expect(report.valueDelivery.opsSharePercent).toBeGreaterThan(0);
+    expect(report.valueDelivery.components.opsPenalty).toBeGreaterThan(0);
+    expect(report.progress.weeklyValueScore).toBe(report.valueDelivery.score);
   });
 
   it("computes engineering review coverage", () => {

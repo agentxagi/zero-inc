@@ -570,6 +570,8 @@ Product Council anti-loop hardening:
 - if execution is active but stagnant for 30+ minutes and milestones are still missing, generation is forced with a concrete unblock proposal
 - per cycle, operating-model (`ops`) meta-proposals are capped to 1 to reduce repetitive OPS noise
 - optional query `ensurePrograms=true` on product-council GET can materialize/refresh evergreen macro programs before analysis
+- high/critical proposals run a specialist debate pass (PM/CTO/QA/Researcher) producing `go|revise|hold` consensus and confidence; `hold` proposals are skipped on materialization
+- report includes weekly delivered-value metric (`valueDelivery`, score 0-100) balancing verified outputs, pillar coverage, review coverage and OPS-noise penalty
 
 ## 10.9 Error Semantics
 
