@@ -554,6 +554,8 @@ Server behavior:
 
 - `GET /companies/:companyId/activity`
 - `GET /companies/:companyId/dashboard`
+- `GET /companies/:companyId/product-council`
+- `POST /companies/:companyId/product-council/generate`
 
 Dashboard payload must include:
 
@@ -561,6 +563,11 @@ Dashboard payload must include:
 - open/in-progress/blocked/done issue counts
 - month-to-date spend and budget utilization
 - pending approvals count
+
+Product Council anti-loop hardening:
+
+- if execution is active but stagnant for 30+ minutes and milestones are still missing, generation is forced with a concrete unblock proposal
+- per cycle, operating-model (`ops`) meta-proposals are capped to 1 to reduce repetitive OPS noise
 
 ## 10.9 Error Semantics
 

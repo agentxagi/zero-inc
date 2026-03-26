@@ -52,6 +52,7 @@ Arquivo: `server/src/services/heartbeat.ts`
 4. P0.4 Guardião de ciclo de vida de processos locais: implementado (watchdog com limiares de pressão, auto-remediação de detached stale e telemetria por run/pid).
 5. P1.1 Phase Gate Engine (transições permitidas + fase explícita por task): implementado.
 6. P1.2 Reviewer specialization lanes (`code|security|ux|ops` + SLA separado): implementado.
+7. P1.3 PM anti-loop hardening (estagnação força geração + limite de OPS meta-task por ciclo): implementado.
 
 ## P0 (executar agora)
 

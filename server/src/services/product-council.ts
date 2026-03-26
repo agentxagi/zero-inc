@@ -146,6 +146,8 @@ const MIN_EXECUTION_STOCK_BY_PILLAR: Record<Pillar, number> = {
   enterprise: 1,
   operating_model: 1,
 };
+const ANTI_LOOP_STAGNATION_WINDOW_MINUTES = 30;
+const MAX_OPS_PROPOSALS_PER_CYCLE = 1;
 
 const COUNCIL_TEAM_MODEL = {
   source: "companies.sh/docs",
@@ -502,6 +504,10 @@ export function buildProductCouncilReport(input: {
   const executionBacklog = input.companyOpenIssues.filter((issue) =>
     issue.status === "backlog" && !isOperationalNoiseIssue(issue),
   );
+  const staleExecutionActiveCutoff = new Date(
+    now.getTime() - ANTI_LOOP_STAGNATION_WINDOW_MINUTES * 60 * 1000,
+  );
+  const staleExecutionActive = executionActive.filter((issue) => issue.updatedAt < staleExecutionActiveCutoff);
   const backlogStaleCutoff = addDays(now, -3);
   const staleExecutionBacklog = executionBacklog.filter((issue) => issue.updatedAt < backlogStaleCutoff);
   const executionPool = [...executionActive, ...executionBacklog];
@@ -590,6 +596,10 @@ export function buildProductCouncilReport(input: {
     suggestedAssigneeName: string | null;
     definitionOfDone: string[];
   }> = [];
+  const isExecutionStagnant =
+    executionActive.length > 0 &&
+    staleExecutionActive.length === executionActive.length &&
+    missingMilestones.length > 0;
 
   if (staleExecutionBacklog.length > 0) {
     const owner = pickAgentByRole(input.agentRows, ["pm", "cto"]);
@@ -609,6 +619,28 @@ export function buildProductCouncilReport(input: {
         "Revisar backlog estagnado e cancelar itens irrelevantes.",
         "Promover até 3 itens para todo com assignee e prioridade.",
         "Cada item promovido deve conter DoD verificável.",
+      ],
+    });
+  }
+
+  if (isExecutionStagnant && !hasOpenIssueForKeywords(input.companyOpenIssues, ["destravar", "execution stall", "unblock"])) {
+    const owner = pickAgentByRole(input.agentRows, ["pm", "cto", "qa"]);
+    proposals.push({
+      id: "mandatory-stalled-execution-unblock",
+      sourceMilestoneId: "ops-proactive-planning",
+      pillar: "operating_model",
+      title: "[PRODUCT] Plano de destravamento para execução estagnada",
+      description:
+        `Execução ativa sem atualização há mais de ${ANTI_LOOP_STAGNATION_WINDOW_MINUTES} minutos. ` +
+        "Gerar plano de destravamento com ação concreta e responsável definido para cada item travado.",
+      priority: "critical",
+      suggestedOwnerRole: owner?.role ?? null,
+      suggestedAssigneeAgentId: owner?.id ?? null,
+      suggestedAssigneeName: owner?.name ?? null,
+      definitionOfDone: [
+        "Listar tarefas ativas estagnadas e identificar bloqueio real de cada uma.",
+        "Criar ação executável por tarefa (subtask/owner/prazo) com evidência esperada.",
+        "Executar pelo menos uma ação de destravamento imediata no ciclo atual.",
       ],
     });
   }
@@ -633,15 +665,32 @@ export function buildProductCouncilReport(input: {
     if (proposals.length >= maxProposals) break;
   }
 
-  const stockRefillProposals = proposals.filter((proposal) => missingExecutionStock.includes(proposal.pillar));
+  const proposalsWithOpsLimit: typeof proposals = [];
+  let opsProposalCount = 0;
+  for (const proposal of proposals) {
+    const isOpsProposal = proposal.pillar === "operating_model";
+    if (isOpsProposal && opsProposalCount >= MAX_OPS_PROPOSALS_PER_CYCLE) continue;
+    if (isOpsProposal) opsProposalCount += 1;
+    proposalsWithOpsLimit.push(proposal);
+    if (proposalsWithOpsLimit.length >= maxProposals) break;
+  }
+  const opsProposalsSkipped = proposals.length - proposalsWithOpsLimit.length;
+  const stockRefillProposals = proposalsWithOpsLimit.filter((proposal) => missingExecutionStock.includes(proposal.pillar));
 
   let shouldGenerate = false;
   let gateReason = "Sem propostas elegíveis.";
+  let forcedByAntiLoop = false;
   if (stockRefillProposals.length > 0) {
     shouldGenerate = true;
     gateReason =
       `Estoque abaixo do mínimo por pilar (${missingExecutionStock.join(", ")}). ` +
       "Gerar tarefas de reposição para manter fluxo contínuo.";
+  } else if (isExecutionStagnant && proposalsWithOpsLimit.length > 0) {
+    shouldGenerate = true;
+    forcedByAntiLoop = true;
+    gateReason =
+      `Execução ativa estagnada (sem atualização há mais de ${ANTI_LOOP_STAGNATION_WINDOW_MINUTES} min) ` +
+      "e milestones pendentes. Gerar tarefa concreta obrigatória para destravamento.";
   } else if (executionActive.length > 0) {
     shouldGenerate = false;
     gateReason = `Existem ${executionActive.length} tarefa(s) de execução ativa(s) (todo/in_progress/blocked).`;
@@ -650,7 +699,7 @@ export function buildProductCouncilReport(input: {
     gateReason =
       `Há ${executionBacklog.length} tarefa(s) de backlog de execução ainda recentes; ` +
       "priorize esse backlog antes de gerar novas tarefas.";
-  } else if (proposals.length > 0) {
+  } else if (proposalsWithOpsLimit.length > 0) {
     shouldGenerate = true;
     gateReason = "Pipeline de execução está ocioso e há lacunas de milestone com propostas claras.";
   }
@@ -670,6 +719,7 @@ export function buildProductCouncilReport(input: {
     workload: {
       companyOpenIssues: input.companyOpenIssues.length,
       executionActive: executionActive.length,
+      staleExecutionActive: staleExecutionActive.length,
       executionBacklog: executionBacklog.length,
       staleExecutionBacklog: staleExecutionBacklog.length,
       executionStockByPillar,
@@ -695,8 +745,16 @@ export function buildProductCouncilReport(input: {
     gating: {
       shouldGenerate,
       reason: gateReason,
+      forcedByAntiLoop,
+      opsProposalsSkipped,
     },
-    proposals: proposals.slice(0, maxProposals),
+    antiLoop: {
+      stagnationWindowMinutes: ANTI_LOOP_STAGNATION_WINDOW_MINUTES,
+      staleExecutionActive: staleExecutionActive.length,
+      forcedByAntiLoop,
+      opsProposalsSkipped,
+    },
+    proposals: proposalsWithOpsLimit,
   };
 }
 

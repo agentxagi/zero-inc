@@ -82,6 +82,7 @@ describe("product-council", () => {
       identifier: "VAL-2",
       title: "[OPEN SOURCE] Refresh quickstart docs",
       status: "in_progress",
+      updatedAt: new Date("2026-03-25T17:50:00.000Z"),
       completedAt: null,
     });
     const activeEnterprise = issue({
@@ -89,6 +90,7 @@ describe("product-council", () => {
       identifier: "VAL-3",
       title: "[ENTERPRISE] Build enterprise auth",
       status: "todo",
+      updatedAt: new Date("2026-03-25T17:52:00.000Z"),
       completedAt: null,
     });
     const activeOps = issue({
@@ -96,6 +98,7 @@ describe("product-council", () => {
       identifier: "VAL-4",
       title: "[PRODUCT] Improve product council planning",
       status: "blocked",
+      updatedAt: new Date("2026-03-25T17:55:00.000Z"),
       completedAt: null,
     });
 
@@ -115,6 +118,50 @@ describe("product-council", () => {
     expect(report.gating.shouldGenerate).toBe(false);
     expect(report.gating.reason).toContain("tarefa(s)");
     expect(report.gating.reason).toContain("ativa(s)");
+  });
+
+  it("forces generation when active execution is stagnant and milestones are still missing", () => {
+    const staleOpenSource = issue({
+      id: "open-1",
+      identifier: "VAL-9",
+      title: "[OPEN SOURCE] Improve docs onboarding",
+      status: "in_progress",
+      updatedAt: new Date("2026-03-25T12:00:00.000Z"),
+      completedAt: null,
+    });
+    const staleEnterprise = issue({
+      id: "open-2",
+      identifier: "VAL-10",
+      title: "[ENTERPRISE] Harden auth boundaries",
+      status: "blocked",
+      updatedAt: new Date("2026-03-25T12:00:00.000Z"),
+      completedAt: null,
+    });
+    const staleOperatingModel = issue({
+      id: "open-3",
+      identifier: "VAL-11",
+      title: "[PRODUCT] Improve product council planning",
+      status: "todo",
+      updatedAt: new Date("2026-03-25T12:00:00.000Z"),
+      completedAt: null,
+    });
+
+    const report = buildProductCouncilReport({
+      companyId: "company-1",
+      goal: defaultGoal,
+      goalDoneIssues: [],
+      doneIssueWorkProducts: [],
+      goalOpenIssues: [staleOpenSource, staleEnterprise, staleOperatingModel],
+      companyOpenIssues: [staleOpenSource, staleEnterprise, staleOperatingModel],
+      agentRows: defaultAgents,
+      outputsLast7Days: 0,
+      now: new Date("2026-03-25T18:00:00.000Z"),
+      maxProposals: 5,
+    });
+
+    expect(report.gating.shouldGenerate).toBe(true);
+    expect(report.gating.forcedByAntiLoop).toBe(true);
+    expect(report.gating.reason).toContain("estagnada");
   });
 
   it("allows generation to refill missing pillar stock", () => {
@@ -170,6 +217,24 @@ describe("product-council", () => {
     expect(report.proposals.length).toBeGreaterThan(0);
     expect(report.proposals.length).toBeLessThanOrEqual(3);
     expect(report.progress.outcomeBasedPercent).toBe(0);
+  });
+
+  it("limits operating-model proposals to reduce repeated OPS meta-task loops", () => {
+    const report = buildProductCouncilReport({
+      companyId: "company-1",
+      goal: defaultGoal,
+      goalDoneIssues: [],
+      doneIssueWorkProducts: [],
+      goalOpenIssues: [],
+      companyOpenIssues: [],
+      agentRows: defaultAgents,
+      outputsLast7Days: 0,
+      now: new Date("2026-03-25T18:00:00.000Z"),
+      maxProposals: 8,
+    });
+
+    const opsProposals = report.proposals.filter((proposal) => proposal.pillar === "operating_model");
+    expect(opsProposals.length).toBeLessThanOrEqual(1);
   });
 
   it("computes engineering review coverage", () => {
