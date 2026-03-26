@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { and, asc, desc, eq, gt, inArray, isNotNull, or, sql } from "drizzle-orm";
@@ -88,6 +89,30 @@ const AUTO_PAUSE_QUOTA_ERROR_CODES = new Set([
 ]);
 const PREVENTIVE_QUOTA_THROTTLE_CACHE_MS = 60_000;
 const PREVENTIVE_QUOTA_THROTTLE_FETCH_TIMEOUT_MS = 5_000;
+const LOCAL_PROCESS_WATCHDOG_DEFAULT_MAX_LOCAL_PROCESSES = 48;
+const LOCAL_PROCESS_WATCHDOG_DEFAULT_MAX_MEMORY_USAGE_PERCENT = 85;
+const LOCAL_PROCESS_WATCHDOG_DEFAULT_DETACHED_IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000; // 6h
+const LOCAL_PROCESS_WATCHDOG_DEFAULT_DETACHED_IDLE_TIMEOUT_UNDER_PRESSURE_MS = 20 * 60 * 1000; // 20m
+const LOCAL_PROCESS_WATCHDOG_DEFAULT_KILL_GRACE_MS = 1500;
+
+type LocalProcessWatchdogConfig = {
+  enabled: boolean;
+  maxLocalProcesses: number;
+  maxMemoryUsagePercent: number;
+  detachedIdleTimeoutMs: number;
+  detachedIdleTimeoutUnderPressureMs: number;
+  killGraceMs: number;
+};
+
+type LocalProcessPressureSnapshot = {
+  localProcessCount: number;
+  maxLocalProcesses: number;
+  processPressure: boolean;
+  memoryUsedPercent: number;
+  maxMemoryUsagePercent: number;
+  memoryPressure: boolean;
+  underPressure: boolean;
+};
 
 function toDiagnosticString(value: unknown): string {
   if (value == null) return "";
@@ -314,6 +339,105 @@ function normalizeMaxConcurrentRuns(value: unknown) {
   const parsed = Math.floor(asNumber(value, HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT));
   if (!Number.isFinite(parsed)) return HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT;
   return Math.max(HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT, Math.min(HEARTBEAT_MAX_CONCURRENT_RUNS_MAX, parsed));
+}
+
+function parsePositiveIntEnv(value: string | undefined, fallback: number, min: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.floor(parsed));
+}
+
+function parsePercentEnv(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(99, parsed));
+}
+
+function resolveLocalProcessWatchdogConfig(
+  overrides?: Partial<LocalProcessWatchdogConfig>,
+): LocalProcessWatchdogConfig {
+  const envEnabled = process.env.HEARTBEAT_PROCESS_WATCHDOG_ENABLED;
+  const enabled = overrides?.enabled ?? (envEnabled == null ? true : envEnabled !== "false");
+  return {
+    enabled,
+    maxLocalProcesses:
+      overrides?.maxLocalProcesses ??
+      parsePositiveIntEnv(
+        process.env.HEARTBEAT_PROCESS_WATCHDOG_MAX_LOCAL_PROCESSES,
+        LOCAL_PROCESS_WATCHDOG_DEFAULT_MAX_LOCAL_PROCESSES,
+        1,
+      ),
+    maxMemoryUsagePercent:
+      overrides?.maxMemoryUsagePercent ??
+      parsePercentEnv(
+        process.env.HEARTBEAT_PROCESS_WATCHDOG_MAX_MEMORY_USAGE_PERCENT,
+        LOCAL_PROCESS_WATCHDOG_DEFAULT_MAX_MEMORY_USAGE_PERCENT,
+      ),
+    detachedIdleTimeoutMs:
+      overrides?.detachedIdleTimeoutMs ??
+      parsePositiveIntEnv(
+        process.env.HEARTBEAT_PROCESS_WATCHDOG_DETACHED_IDLE_TIMEOUT_MS,
+        LOCAL_PROCESS_WATCHDOG_DEFAULT_DETACHED_IDLE_TIMEOUT_MS,
+        5_000,
+      ),
+    detachedIdleTimeoutUnderPressureMs:
+      overrides?.detachedIdleTimeoutUnderPressureMs ??
+      parsePositiveIntEnv(
+        process.env.HEARTBEAT_PROCESS_WATCHDOG_DETACHED_IDLE_TIMEOUT_UNDER_PRESSURE_MS,
+        LOCAL_PROCESS_WATCHDOG_DEFAULT_DETACHED_IDLE_TIMEOUT_UNDER_PRESSURE_MS,
+        1_000,
+      ),
+    killGraceMs:
+      overrides?.killGraceMs ??
+      parsePositiveIntEnv(
+        process.env.HEARTBEAT_PROCESS_WATCHDOG_KILL_GRACE_MS,
+        LOCAL_PROCESS_WATCHDOG_DEFAULT_KILL_GRACE_MS,
+        100,
+      ),
+  };
+}
+
+function sampleLocalProcessPressure(
+  localProcessCount: number,
+  config: LocalProcessWatchdogConfig,
+): LocalProcessPressureSnapshot {
+  const totalMemory = os.totalmem();
+  const freeMemory = os.freemem();
+  const usedMemory = Math.max(0, totalMemory - freeMemory);
+  const memoryUsedPercent = totalMemory > 0 ? (usedMemory / totalMemory) * 100 : 0;
+  const processPressure = localProcessCount >= config.maxLocalProcesses;
+  const memoryPressure = memoryUsedPercent >= config.maxMemoryUsagePercent;
+  return {
+    localProcessCount,
+    maxLocalProcesses: config.maxLocalProcesses,
+    processPressure,
+    memoryUsedPercent,
+    maxMemoryUsagePercent: config.maxMemoryUsagePercent,
+    memoryPressure,
+    underPressure: processPressure || memoryPressure,
+  };
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+function signalProcessTreeByPid(pid: number, signal: NodeJS.Signals) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  if (process.platform !== "win32") {
+    try {
+      process.kill(-pid, signal);
+      return true;
+    } catch {
+      // Fall through to direct pid signal.
+    }
+  }
+  try {
+    process.kill(pid, signal);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function withAgentStartLock<T>(agentId: string, fn: () => Promise<T>) {
@@ -828,6 +952,36 @@ function isProcessAlive(pid: number | null | undefined) {
     if (code === "ESRCH") return false;
     return false;
   }
+}
+
+function resolveDetachedReferenceMs(run: {
+  updatedAt?: Date | string | null;
+  processStartedAt?: Date | string | null;
+  startedAt?: Date | string | null;
+  createdAt?: Date | string | null;
+}) {
+  const candidate = run.updatedAt ?? run.processStartedAt ?? run.startedAt ?? run.createdAt;
+  const parsed = candidate ? new Date(candidate).getTime() : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+async function terminateRunProcessByPid(pid: number, killGraceMs: number) {
+  const signaled = signalProcessTreeByPid(pid, "SIGTERM");
+  if (!signaled) {
+    return {
+      requested: false,
+      aliveAfter: isProcessAlive(pid),
+    };
+  }
+  await sleep(killGraceMs);
+  if (isProcessAlive(pid)) {
+    signalProcessTreeByPid(pid, "SIGKILL");
+    await sleep(100);
+  }
+  return {
+    requested: true,
+    aliveAfter: isProcessAlive(pid),
+  };
 }
 
 function hasChildExited(
@@ -2112,9 +2266,10 @@ export function heartbeatService(db: Db) {
     }
   }
 
-  async function reapOrphanedRuns(opts?: { staleThresholdMs?: number }) {
+  async function reapOrphanedRuns(opts?: { staleThresholdMs?: number; watchdog?: Partial<LocalProcessWatchdogConfig> }) {
     const staleThresholdMs = opts?.staleThresholdMs ?? 0;
     const MAX_RUN_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours — kill any run older than this
+    const watchdogConfig = resolveLocalProcessWatchdogConfig(opts?.watchdog);
     const now = new Date();
 
     // Find all runs stuck in "running" state (queued runs are legitimately waiting; resumeQueuedRuns handles them)
@@ -2127,14 +2282,57 @@ export function heartbeatService(db: Db) {
       .innerJoin(agents, eq(heartbeatRuns.agentId, agents.id))
       .where(eq(heartbeatRuns.status, "running"));
 
+    const localAliveCount = activeRuns.reduce((count, { run, adapterType }) => {
+      if (!isTrackedLocalChildProcessAdapter(adapterType)) return count;
+      if (!run.processPid || !isProcessAlive(run.processPid)) return count;
+      return count + 1;
+    }, 0);
+    const pressure = sampleLocalProcessPressure(localAliveCount, watchdogConfig);
+    if (watchdogConfig.enabled && pressure.underPressure) {
+      logger.warn(
+        {
+          localProcessCount: pressure.localProcessCount,
+          maxLocalProcesses: pressure.maxLocalProcesses,
+          processPressure: pressure.processPressure,
+          memoryUsedPercent: Number(pressure.memoryUsedPercent.toFixed(2)),
+          maxMemoryUsagePercent: pressure.maxMemoryUsagePercent,
+          memoryPressure: pressure.memoryPressure,
+        },
+        "local process watchdog pressure detected",
+      );
+    }
+
     const reaped: string[] = [];
+    let autoRemediatedDetached = 0;
 
     for (const { run, adapterType } of activeRuns) {
-      // Check max run duration — kill even if process is still alive
+      const tracksLocalChild = isTrackedLocalChildProcessAdapter(adapterType);
+
+      // Check max run duration — kill even if process is still alive.
       const startedAt = run.startedAt ? new Date(run.startedAt).getTime() : 0;
       if (startedAt && now.getTime() - startedAt > MAX_RUN_DURATION_MS) {
-        logger.warn({ runId: run.id, agentId: run.agentId, startedAt: run.startedAt },
-          "run exceeded max duration, killing");
+        let durationTermination:
+          | {
+            requested: boolean;
+            aliveAfter: boolean;
+          }
+          | null = null;
+        if (tracksLocalChild && run.processPid && isProcessAlive(run.processPid)) {
+          durationTermination = await terminateRunProcessByPid(run.processPid, watchdogConfig.killGraceMs);
+        }
+
+        logger.warn(
+          {
+            runId: run.id,
+            agentId: run.agentId,
+            startedAt: run.startedAt,
+            processPid: run.processPid,
+            processKillRequested: durationTermination?.requested ?? false,
+            processAliveAfterKill: durationTermination?.aliveAfter ?? null,
+          },
+          "run exceeded max duration, killing",
+        );
+
         const durationRun = await setRunStatus(run.id, "failed", {
           error: `Run exceeded maximum duration of 2 hours (started at ${run.startedAt})`,
           errorCode: "max_duration_exceeded",
@@ -2150,6 +2348,15 @@ export function heartbeatService(db: Db) {
             stream: "system",
             level: "error",
             message: "Run exceeded maximum duration of 2 hours — killed by scheduler",
+            payload: {
+              ...(run.processPid ? { processPid: run.processPid } : {}),
+              ...(durationTermination
+                ? {
+                  processKillRequested: durationTermination.requested,
+                  processAliveAfterKill: durationTermination.aliveAfter,
+                }
+                : {}),
+            },
           });
 
           // Preserve git worktree changes; only auto-stash shared workspace changes.
@@ -2179,14 +2386,18 @@ export function heartbeatService(db: Db) {
 
       if (runningProcesses.has(run.id) || activeRunExecutions.has(run.id)) continue;
 
-      // Apply staleness threshold to avoid false positives
+      // Apply staleness threshold to avoid false positives.
       if (staleThresholdMs > 0) {
         const refTime = run.updatedAt ? new Date(run.updatedAt).getTime() : 0;
         if (now.getTime() - refTime < staleThresholdMs) continue;
       }
 
-      const tracksLocalChild = isTrackedLocalChildProcessAdapter(adapterType);
       if (tracksLocalChild && run.processPid && isProcessAlive(run.processPid)) {
+        const detachedForMs = Math.max(0, now.getTime() - resolveDetachedReferenceMs(run));
+        const detachedIdleThresholdMs = pressure.underPressure
+          ? watchdogConfig.detachedIdleTimeoutUnderPressureMs
+          : watchdogConfig.detachedIdleTimeoutMs;
+
         if (run.errorCode !== DETACHED_PROCESS_ERROR_CODE) {
           const detachedMessage = `Lost in-memory process handle, but child pid ${run.processPid} is still alive`;
           const detachedRun = await setRunStatus(run.id, "running", {
@@ -2201,10 +2412,68 @@ export function heartbeatService(db: Db) {
               message: detachedMessage,
               payload: {
                 processPid: run.processPid,
+                detachedForMs,
+                detachedIdleThresholdMs,
               },
             });
           }
         }
+
+        const shouldTerminateDetached =
+          watchdogConfig.enabled &&
+          run.errorCode === DETACHED_PROCESS_ERROR_CODE &&
+          detachedForMs >= detachedIdleThresholdMs;
+
+        if (!shouldTerminateDetached) continue;
+
+        const termination = await terminateRunProcessByPid(run.processPid, watchdogConfig.killGraceMs);
+        if (termination.aliveAfter) {
+          logger.warn(
+            {
+              runId: run.id,
+              processPid: run.processPid,
+              detachedForMs,
+              detachedIdleThresholdMs,
+              processKillRequested: termination.requested,
+            },
+            "local process watchdog could not terminate detached process; leaving run active",
+          );
+          continue;
+        }
+
+        let detachedRun = await setRunStatus(run.id, "failed", {
+          error: `Detached process exceeded idle timeout (${Math.round(detachedForMs / 1000)}s); terminated by watchdog`,
+          errorCode: "process_detached_timeout",
+          finishedAt: now,
+        });
+        await setWakeupStatus(run.wakeupRequestId, "failed", {
+          finishedAt: now,
+          error: "Detached process exceeded idle timeout and was terminated by watchdog",
+        });
+        if (!detachedRun) detachedRun = await getRun(run.id);
+        if (!detachedRun) continue;
+
+        await appendRunEvent(detachedRun, await nextRunEventSeq(detachedRun.id), {
+          eventType: "lifecycle",
+          stream: "system",
+          level: "error",
+          message: "Detached process exceeded idle timeout — watchdog terminated child process",
+          payload: {
+            processPid: run.processPid,
+            detachedForMs,
+            detachedIdleThresholdMs,
+            processKillRequested: termination.requested,
+            processAliveAfterKill: termination.aliveAfter,
+            pressure,
+          },
+        });
+
+        await releaseIssueExecutionAndPromote(detachedRun);
+        await finalizeAgentStatus(run.agentId, "failed");
+        await startNextQueuedRunForAgent(run.agentId);
+        runningProcesses.delete(run.id);
+        reaped.push(run.id);
+        autoRemediatedDetached += 1;
         continue;
       }
 
@@ -2271,9 +2540,16 @@ export function heartbeatService(db: Db) {
     }
 
     if (reaped.length > 0) {
-      logger.warn({ reapedCount: reaped.length, runIds: reaped }, "reaped orphaned heartbeat runs");
+      logger.warn({ reapedCount: reaped.length, runIds: reaped, autoRemediatedDetached }, "reaped orphaned heartbeat runs");
     }
-    return { reaped: reaped.length, runIds: reaped };
+    return {
+      reaped: reaped.length,
+      runIds: reaped,
+      watchdog: {
+        pressure,
+        autoRemediatedDetached,
+      },
+    };
   }
 
   async function resumeQueuedRuns() {
@@ -4577,6 +4853,72 @@ export function heartbeatService(db: Db) {
         ...row,
         resultJson: summarizeHeartbeatRunResultJson(row.resultJson),
       }));
+    },
+
+    getLocalProcessTelemetry: async (companyId: string, opts?: { limit?: number }) => {
+      const limit = Math.max(1, Math.min(500, opts?.limit ?? 200));
+      const watchdogConfig = resolveLocalProcessWatchdogConfig();
+      const rows = await db
+        .select({
+          runId: heartbeatRuns.id,
+          companyId: heartbeatRuns.companyId,
+          agentId: heartbeatRuns.agentId,
+          agentName: agents.name,
+          adapterType: agents.adapterType,
+          status: heartbeatRuns.status,
+          errorCode: heartbeatRuns.errorCode,
+          processPid: heartbeatRuns.processPid,
+          startedAt: heartbeatRuns.startedAt,
+          processStartedAt: heartbeatRuns.processStartedAt,
+          lastHeartbeatAt: heartbeatRuns.updatedAt,
+          createdAt: heartbeatRuns.createdAt,
+          issueId: sql<string | null>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`.as("issueId"),
+        })
+        .from(heartbeatRuns)
+        .innerJoin(agents, eq(heartbeatRuns.agentId, agents.id))
+        .where(
+          and(
+            eq(heartbeatRuns.companyId, companyId),
+            inArray(heartbeatRuns.status, ["queued", "running"]),
+            inArray(agents.adapterType, [...SESSIONED_LOCAL_ADAPTERS]),
+          ),
+        )
+        .orderBy(desc(heartbeatRuns.createdAt))
+        .limit(limit);
+
+      const runs = rows.map((row) => {
+        const pid = row.processPid;
+        const alive = typeof pid === "number" ? isProcessAlive(pid) : false;
+        const detachedForMs = row.status === "running" && row.errorCode === DETACHED_PROCESS_ERROR_CODE
+          ? Math.max(0, Date.now() - resolveDetachedReferenceMs({
+            updatedAt: row.lastHeartbeatAt,
+            processStartedAt: row.processStartedAt,
+            startedAt: row.startedAt,
+            createdAt: row.createdAt,
+          }))
+          : 0;
+        return {
+          ...row,
+          processAlive: alive,
+          detached: row.errorCode === DETACHED_PROCESS_ERROR_CODE,
+          detachedForMs,
+          inMemoryTracked: runningProcesses.has(row.runId),
+        };
+      });
+
+      const localAliveCount = runs.filter((run) => run.processAlive).length;
+      const pressure = sampleLocalProcessPressure(localAliveCount, watchdogConfig);
+      return {
+        generatedAt: new Date().toISOString(),
+        watchdog: watchdogConfig,
+        pressure,
+        totals: {
+          rows: runs.length,
+          alive: localAliveCount,
+          detached: runs.filter((run) => run.detached).length,
+        },
+        runs,
+      };
     },
 
     getRun,

@@ -44,6 +44,13 @@ Arquivo: `server/src/services/heartbeat.ts`
 
 ## 3. Recomendações priorizadas
 
+## 3.0 Status de execução (2026-03-25)
+
+1. P0.1 Outcome Ledger + gates de entregável: implementado.
+2. P0.2 Discovery Engine + estoque por pilar: implementado.
+3. P0.3 Contrato explícito de bloqueio humano + inbox SLA: implementado.
+4. P0.4 Guardião de ciclo de vida de processos locais: implementado (watchdog com limiares de pressão, auto-remediação de detached stale e telemetria por run/pid).
+
 ## P0 (executar agora)
 
 1. Outcome Ledger (entregável real como fonte de verdade)
@@ -124,4 +131,3 @@ Arquivo: `server/src/services/heartbeat.ts`
 ## 6. Conclusão
 
 A direção correta não é aumentar quantidade de agentes; é endurecer o sistema de geração e validação de trabalho real. O ZeroInc já tem bons blocos de governança. O próximo salto é transformar esses blocos em um ciclo contínuo de entrega verificável, com autonomia alta e escalonamento humano explícito.
-

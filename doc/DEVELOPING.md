@@ -261,6 +261,25 @@ Expected:
 - `/api/health` returns `{"status":"ok"}`
 - `/api/companies` returns a JSON array
 
+## Local Process Watchdog
+
+Heartbeat recovery includes a local-process watchdog for detached child processes (`claude_local`, `codex_local`, `cursor`, `gemini_local`, `opencode_local`, `pi_local`).
+
+Company snapshot endpoint:
+
+```sh
+curl "http://localhost:3100/api/companies/<company-id>/process-watchdog"
+```
+
+Main env knobs:
+
+- `HEARTBEAT_PROCESS_WATCHDOG_ENABLED=true|false`
+- `HEARTBEAT_PROCESS_WATCHDOG_MAX_LOCAL_PROCESSES=<count>` (default `48`)
+- `HEARTBEAT_PROCESS_WATCHDOG_MAX_MEMORY_USAGE_PERCENT=<1-99>` (default `85`)
+- `HEARTBEAT_PROCESS_WATCHDOG_DETACHED_IDLE_TIMEOUT_MS=<ms>` (default `21600000` / 6h)
+- `HEARTBEAT_PROCESS_WATCHDOG_DETACHED_IDLE_TIMEOUT_UNDER_PRESSURE_MS=<ms>` (default `1200000` / 20m)
+- `HEARTBEAT_PROCESS_WATCHDOG_KILL_GRACE_MS=<ms>` (default `1500`)
+
 ## Reset Local Dev Database
 
 To wipe local dev data and start fresh:

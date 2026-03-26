@@ -105,6 +105,7 @@ A lightweight scheduler/worker in the server process handles:
 
 - heartbeat trigger checks
 - stuck run detection
+- local-process lifecycle watchdog (detached/orphan detection + safe auto-remediation under pressure)
 - budget threshold checks
 
 Separate queue infrastructure is not required for V1.
@@ -587,6 +588,7 @@ Behavior:
 - stream stdout/stderr to run logs
 - mark run status on exit code/timeout
 - cancel sends SIGTERM then SIGKILL after grace
+- persist process metadata (`process_pid`, `process_started_at`) for watchdog telemetry/recovery
 
 ## 11.3 HTTP Adapter
 
@@ -655,6 +657,20 @@ Scheduler must skip invocation when:
 - agent is paused/terminated
 - an existing run is active
 - hard budget limit has been hit
+
+## 11.7 Local Process Watchdog
+
+For local child-process adapters (`claude_local`, `codex_local`, `cursor`, `gemini_local`, `opencode_local`, `pi_local`):
+
+- runtime telemetry must include `run_id -> process_pid -> process_started_at -> last_heartbeat_at`
+- detached runs (`process_detached`) are monitored with idle thresholds
+- when host pressure crosses configured limits (local process count and/or memory usage), stale detached runs are terminated automatically
+- max-duration runs are force-failed and their child PID is explicitly signaled (SIGTERM, then SIGKILL)
+
+Operator API surfaces:
+
+- `GET /api/companies/:companyId/live-runs` includes `processPid`, `processStartedAt`, `lastHeartbeatAt`, `errorCode`
+- `GET /api/companies/:companyId/process-watchdog` returns watchdog snapshot (pressure + run telemetry)
 
 ## 12. Governance and Approval Flows
 

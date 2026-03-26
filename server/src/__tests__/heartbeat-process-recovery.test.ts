@@ -94,6 +94,25 @@ function spawnAliveProcess() {
   });
 }
 
+function isPidAlive(pid: number | null | undefined) {
+  if (typeof pid !== "number" || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForPidExit(pid: number, timeoutMs = 3000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (!isPidAlive(pid)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return !isPidAlive(pid);
+}
+
 describe("heartbeat orphaned process recovery", () => {
   let db!: ReturnType<typeof createDb>;
   let instance: EmbeddedPostgresInstance | null = null;
@@ -141,6 +160,8 @@ describe("heartbeat orphaned process recovery", () => {
     includeIssue?: boolean;
     runErrorCode?: string | null;
     runError?: string | null;
+    startedAt?: Date;
+    updatedAt?: Date;
   }) {
     const companyId = randomUUID();
     const agentId = randomUUID();
@@ -148,6 +169,8 @@ describe("heartbeat orphaned process recovery", () => {
     const wakeupRequestId = randomUUID();
     const issueId = randomUUID();
     const now = new Date();
+    const startedAt = input?.startedAt ?? now;
+    const updatedAt = input?.updatedAt ?? startedAt;
     const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 
     await db.insert(companies).values({
@@ -195,8 +218,9 @@ describe("heartbeat orphaned process recovery", () => {
       processLossRetryCount: input?.processLossRetryCount ?? 0,
       errorCode: input?.runErrorCode ?? null,
       error: input?.runError ?? null,
-      startedAt: now,
-      updatedAt: now,
+      startedAt,
+      processStartedAt: startedAt,
+      updatedAt,
     });
 
     if (input?.includeIssue !== false) {
@@ -319,5 +343,62 @@ describe("heartbeat orphaned process recovery", () => {
     const run = await heartbeat.getRun(runId);
     expect(run?.errorCode).toBeNull();
     expect(run?.error).toBeNull();
+  });
+
+  it("terminates detached local processes when watchdog idle timeout is exceeded", async () => {
+    const child = spawnAliveProcess();
+    childProcesses.add(child);
+    expect(child.pid).toBeTypeOf("number");
+
+    const detachedAt = new Date(Date.now() - 5 * 60 * 1000);
+    const { runId } = await seedRunFixture({
+      processPid: child.pid ?? null,
+      includeIssue: false,
+      runErrorCode: "process_detached",
+      runError: `Lost in-memory process handle, but child pid ${child.pid} is still alive`,
+      startedAt: detachedAt,
+      updatedAt: detachedAt,
+    });
+    const heartbeat = heartbeatService(db);
+
+    const result = await heartbeat.reapOrphanedRuns({
+      watchdog: {
+        detachedIdleTimeoutMs: 1_000,
+        detachedIdleTimeoutUnderPressureMs: 1_000,
+        killGraceMs: 100,
+      },
+    });
+
+    expect(result.reaped).toBe(1);
+    expect(result.runIds).toEqual([runId]);
+
+    const run = await heartbeat.getRun(runId);
+    expect(run?.status).toBe("failed");
+    expect(run?.errorCode).toBe("process_detached_timeout");
+    expect(await waitForPidExit(child.pid ?? -1)).toBe(true);
+  });
+
+  it("kills the child pid when max run duration is exceeded", async () => {
+    const child = spawnAliveProcess();
+    childProcesses.add(child);
+    expect(child.pid).toBeTypeOf("number");
+
+    const startedAt = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const { runId } = await seedRunFixture({
+      processPid: child.pid ?? null,
+      includeIssue: false,
+      startedAt,
+      updatedAt: startedAt,
+    });
+    const heartbeat = heartbeatService(db);
+
+    const result = await heartbeat.reapOrphanedRuns();
+    expect(result.reaped).toBe(1);
+    expect(result.runIds).toEqual([runId]);
+
+    const run = await heartbeat.getRun(runId);
+    expect(run?.status).toBe("failed");
+    expect(run?.errorCode).toBe("max_duration_exceeded");
+    expect(await waitForPidExit(child.pid ?? -1)).toBe(true);
   });
 });

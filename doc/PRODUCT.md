@@ -140,7 +140,7 @@ ZeroInc’s core identity is a **control plane for autonomous AI companies**, ce
    The mental model should not change between local solo use and shared/private or public/cloud deployment.
 
 7. **Safe autonomy**
-   Auto mode is allowed; hidden token burn is not.
+   Auto mode is allowed; hidden token burn is not. Local runtime process pressure must be guarded (watchdog + telemetry + auto-remediation for detached stale runs).
 
 8. **Thin core, rich edges**
    Put optional chat, knowledge, and special surfaces into plugins/extensions rather than bloating the control plane.

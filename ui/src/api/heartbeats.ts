@@ -19,10 +19,14 @@ export interface LiveRunForIssue {
   triggerDetail: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  lastHeartbeatAt?: string | null;
   createdAt: string;
   agentId: string;
   agentName: string;
   adapterType: string;
+  processPid?: number | null;
+  processStartedAt?: string | null;
+  errorCode?: string | null;
   issueId?: string | null;
 }
 

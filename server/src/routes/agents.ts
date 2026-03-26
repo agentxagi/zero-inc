@@ -2150,10 +2150,14 @@ export function agentRoutes(db: Db) {
       triggerDetail: heartbeatRuns.triggerDetail,
       startedAt: heartbeatRuns.startedAt,
       finishedAt: heartbeatRuns.finishedAt,
+      lastHeartbeatAt: heartbeatRuns.updatedAt,
       createdAt: heartbeatRuns.createdAt,
       agentId: heartbeatRuns.agentId,
       agentName: agentsTable.name,
       adapterType: agentsTable.adapterType,
+      processPid: heartbeatRuns.processPid,
+      processStartedAt: heartbeatRuns.processStartedAt,
+      errorCode: heartbeatRuns.errorCode,
       issueId: sql<string | null>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`.as("issueId"),
     };
 
@@ -2190,6 +2194,16 @@ export function agentRoutes(db: Db) {
     }
 
     res.json(liveRuns);
+  });
+
+  router.get("/companies/:companyId/process-watchdog", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    const limitParam = req.query.limit as string | undefined;
+    const limit = limitParam ? Math.max(1, Math.min(500, parseInt(limitParam, 10) || 200)) : 200;
+    const snapshot = await heartbeat.getLocalProcessTelemetry(companyId, { limit });
+    res.json(snapshot);
   });
 
   router.get("/heartbeat-runs/:runId", async (req, res) => {
@@ -2317,10 +2331,14 @@ export function agentRoutes(db: Db) {
         triggerDetail: heartbeatRuns.triggerDetail,
         startedAt: heartbeatRuns.startedAt,
         finishedAt: heartbeatRuns.finishedAt,
+        lastHeartbeatAt: heartbeatRuns.updatedAt,
         createdAt: heartbeatRuns.createdAt,
         agentId: heartbeatRuns.agentId,
         agentName: agentsTable.name,
         adapterType: agentsTable.adapterType,
+        processPid: heartbeatRuns.processPid,
+        processStartedAt: heartbeatRuns.processStartedAt,
+        errorCode: heartbeatRuns.errorCode,
       })
       .from(heartbeatRuns)
       .innerJoin(agentsTable, eq(heartbeatRuns.agentId, agentsTable.id))
