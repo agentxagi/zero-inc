@@ -59,6 +59,8 @@ Arquivo: `server/src/services/heartbeat.ts`
 11. P2.4 Progresso de goal baseado em evidência real (done verificado + métricas raw de auditoria): implementado.
 12. P2.5 Visibilidade no Dashboard dos sinais do Product Council (score semanal, gate, debate e propostas): implementado.
 13. P2.6 Goal Detail com progresso verificado x bruto e sinal de unverified done: implementado.
+14. P2.7 Checklist automático de Operational Readiness (30d) no Dashboard: implementado.
+15. P2.8 Product Council auto-materializer (scheduler com cooldown e dedupe para gerar backlog acionável): implementado.
 
 ## P0 (executar agora)
 

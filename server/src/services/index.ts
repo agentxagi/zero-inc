@@ -36,3 +36,5 @@ export { generateAgentProfile, AgentProfileGeneratorError } from "./agent-profil
 export { delegationRulesService } from "./delegation-rules.js";
 export { sprintService } from "./sprints.js";
 export { taskAuditService } from "./task-audit.js";
+export { materializeProductCouncilProposals } from "./product-council-materializer.js";
+export { productCouncilAutomationService } from "./product-council-automation.js";

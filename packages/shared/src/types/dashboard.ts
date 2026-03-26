@@ -24,6 +24,79 @@ export interface DashboardSummary {
     pausedAgents: number;
     pausedProjects: number;
   };
+  operationalReadiness?: OperationalReadinessSummary;
+}
+
+export type OperationalReadinessStatus = "healthy" | "warning" | "critical";
+export type OperationalReadinessCheckStatus = "pass" | "warning" | "fail";
+
+export interface OperationalReadinessCheck {
+  status: OperationalReadinessCheckStatus;
+  pass: boolean;
+  title: string;
+  description: string;
+  details: Record<string, unknown>;
+}
+
+export interface OperationalReadinessWeeklySignal {
+  label: string;
+  outputs: number;
+  workProducts: number;
+  total: number;
+}
+
+export interface OperationalReadinessSummary {
+  generatedAt: string;
+  windowDays: number;
+  status: OperationalReadinessStatus;
+  score: number;
+  checks: {
+    deliverablesGrowth: OperationalReadinessCheck & {
+      details: {
+        transitionsNonDecreasing: number;
+        latestWeeklyTotal: number;
+        series: OperationalReadinessWeeklySignal[];
+      };
+    };
+    executionContinuity: OperationalReadinessCheck & {
+      details: {
+        daysWithExecutionProxy: number;
+        daysWithoutExecutionProxy: number;
+        totalDays: number;
+        currentTodoOrInProgressProduct: number;
+      };
+    };
+    opsNoiseShare: OperationalReadinessCheck & {
+      details: {
+        opsSharePercent: number;
+        thresholdPercent: number;
+        totalDoneLast30Days: number;
+        opsDoneLast30Days: number;
+      };
+    };
+    cancellationRate: OperationalReadinessCheck & {
+      details: {
+        cancellationRatePercent: number;
+        thresholdPercent: number;
+        doneLast30Days: number;
+        cancelledLast30Days: number;
+      };
+    };
+    localProcessHealth: OperationalReadinessCheck & {
+      details: {
+        runningLocalProcesses: number;
+        detachedTimeoutRunsLast7Days: number;
+        processLossRetriesLast7Days: number;
+        localRunsLast7Days: number;
+      };
+    };
+  };
+  summary: {
+    passedChecks: number;
+    warningChecks: number;
+    failedChecks: number;
+    totalChecks: number;
+  };
 }
 
 export type ProductCouncilPillar = "open_source" | "enterprise" | "operating_model";

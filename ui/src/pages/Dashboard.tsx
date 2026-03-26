@@ -35,6 +35,12 @@ function normalizeValueDeliveryStatus(status: string): string {
   return status.replace(/_/g, " ");
 }
 
+function readinessStatusClass(status: "pass" | "warning" | "fail"): string {
+  if (status === "pass") return "text-emerald-600";
+  if (status === "warning") return "text-amber-600";
+  return "text-red-600";
+}
+
 export function Dashboard() {
   const { selectedCompanyId, companies } = useCompany();
   const { openOnboarding } = useDialog();
@@ -292,6 +298,33 @@ export function Dashboard() {
               }
             />
           </div>
+
+          {data.operationalReadiness ? (
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Operational Readiness (30d)</p>
+                  <p className="text-sm font-medium">
+                    {data.operationalReadiness.status.toUpperCase()} · {data.operationalReadiness.score}/100
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Pass {data.operationalReadiness.summary.passedChecks}/{data.operationalReadiness.summary.totalChecks}
+                </p>
+              </div>
+              <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-2">
+                {Object.values(data.operationalReadiness.checks).map((check) => (
+                  <div key={check.title} className="rounded-md border border-border px-3 py-2">
+                    <p className={cn("text-xs font-semibold uppercase tracking-wide", readinessStatusClass(check.status))}>
+                      {check.status}
+                    </p>
+                    <p className="text-sm font-medium mt-1">{check.title}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{check.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <ChartCard title="Run Activity" subtitle="Last 14 days">

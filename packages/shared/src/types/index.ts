@@ -142,6 +142,11 @@ export type {
 export type { LiveEvent } from "./live.js";
 export type {
   DashboardSummary,
+  OperationalReadinessStatus,
+  OperationalReadinessCheckStatus,
+  OperationalReadinessCheck,
+  OperationalReadinessWeeklySignal,
+  OperationalReadinessSummary,
   ProductCouncilPillar,
   ProductCouncilProposalPriority,
   ProductCouncilDebateConsensus,
