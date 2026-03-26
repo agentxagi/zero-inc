@@ -96,6 +96,7 @@ export const queryKeys = {
     providers: (companyId: string) => ["secret-providers", companyId] as const,
   },
   dashboard: (companyId: string) => ["dashboard", companyId] as const,
+  dashboardProductCouncil: (companyId: string) => ["dashboard", companyId, "product-council"] as const,
   dashboardHumanQueue: (companyId: string) => ["dashboard", companyId, "human-queue"] as const,
   sidebarBadges: (companyId: string) => ["sidebar-badges", companyId] as const,
   activity: (companyId: string) => ["activity", companyId] as const,

@@ -99,7 +99,7 @@ export type {
   IssueAttachment,
   IssueLabel,
 } from "./issue.js";
-export type { Goal } from "./goal.js";
+export type { Goal, GoalProgress } from "./goal.js";
 export type { Approval, ApprovalComment } from "./approval.js";
 export type {
   BudgetPolicy,
@@ -140,7 +140,26 @@ export type {
   InstanceSchedulerHeartbeatAgent,
 } from "./heartbeat.js";
 export type { LiveEvent } from "./live.js";
-export type { DashboardSummary, HumanQueueItem, HumanQueueSummary } from "./dashboard.js";
+export type {
+  DashboardSummary,
+  ProductCouncilPillar,
+  ProductCouncilProposalPriority,
+  ProductCouncilDebateConsensus,
+  ProductCouncilDebateStance,
+  ProductCouncilValueDeliveryStatus,
+  ProductCouncilMacroProgram,
+  ProductCouncilMacroProgramsSummary,
+  ProductCouncilGoalSummary,
+  ProductCouncilMilestone,
+  ProductCouncilDiscussionEntry,
+  ProductCouncilProposal,
+  ProductCouncilProposalDebateSpeaker,
+  ProductCouncilProposalDebateItem,
+  ProductCouncilValueDelivery,
+  ProductCouncilReport,
+  HumanQueueItem,
+  HumanQueueSummary,
+} from "./dashboard.js";
 export type { ActivityEvent } from "./activity.js";
 export type { SidebarBadges } from "./sidebar-badges.js";
 export type {

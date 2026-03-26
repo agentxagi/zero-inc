@@ -19,7 +19,7 @@ import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
+import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle, Gauge, ListChecks, MessageSquareWarning } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -29,6 +29,10 @@ import { PluginSlotOutlet } from "@/plugins/slots";
 function getRecentIssues(issues: Issue[]): Issue[] {
   return [...issues]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
+function normalizeValueDeliveryStatus(status: string): string {
+  return status.replace(/_/g, " ");
 }
 
 export function Dashboard() {
@@ -77,6 +81,12 @@ export function Dashboard() {
   const { data: runs } = useQuery({
     queryKey: queryKeys.heartbeats(selectedCompanyId!),
     queryFn: () => heartbeatsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: council, error: councilError } = useQuery({
+    queryKey: queryKeys.dashboardProductCouncil(selectedCompanyId!),
+    queryFn: () => dashboardApi.productCouncil(selectedCompanyId!, { maxProposals: 5 }),
     enabled: !!selectedCompanyId,
   });
 
@@ -297,6 +307,97 @@ export function Dashboard() {
               <SuccessRateChart runs={runs ?? []} />
             </ChartCard>
           </div>
+
+          {councilError ? (
+            <p className="text-sm text-destructive">{councilError.message}</p>
+          ) : null}
+
+          {council ? (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                  Product Council
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <MetricCard
+                    icon={Gauge}
+                    value={`${council.valueDelivery.score}/100`}
+                    label="Weekly Value Score"
+                    description={
+                      <span>
+                        {normalizeValueDeliveryStatus(council.valueDelivery.status)} · {council.valueDelivery.verifiedDoneLast7Days}/{council.valueDelivery.totalDoneLast7Days} verified
+                      </span>
+                    }
+                  />
+                  <MetricCard
+                    icon={ListChecks}
+                    value={`${council.progress.outcomeBasedPercent}%`}
+                    label="Outcome Progress"
+                    description={
+                      <span>
+                        verified {council.progress.issueBasedPercent}% · raw {council.progress.rawIssueBasedPercent}% · review {council.progress.reviewCoveragePercent ?? 0}%
+                      </span>
+                    }
+                  />
+                  <MetricCard
+                    icon={MessageSquareWarning}
+                    value={council.proposalDebate.summary.reviewed}
+                    label="Specialist Debates"
+                    description={
+                      <span>
+                        {council.proposalDebate.summary.go} go · {council.proposalDebate.summary.revise} revise · {council.proposalDebate.summary.hold} hold
+                      </span>
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="rounded-md border border-border px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Generation Gate</p>
+                  <p className="text-sm font-medium mt-1">
+                    {council.gating.shouldGenerate ? "Ready to Generate New Tasks" : "Hold New Task Generation"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">{council.gating.reason}</p>
+                </div>
+                <div className="rounded-md border border-border px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Delivery Mix (7 Days)</p>
+                  <p className="text-sm font-medium mt-1">
+                    {council.valueDelivery.pillarCoveragePercent}% pillar coverage · {council.valueDelivery.opsSharePercent}% OPS share
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Throughput {council.valueDelivery.components.throughputScore} · Verification {council.valueDelivery.components.verificationScore} · OPS penalty -{council.valueDelivery.components.opsPenalty}
+                  </p>
+                </div>
+              </div>
+
+              {council.proposals.length > 0 ? (
+                <div className="rounded-md border border-border overflow-hidden">
+                  <div className="px-4 py-2 text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
+                    Top Proposals ({council.proposals.length})
+                  </div>
+                  <div className="divide-y divide-border">
+                    {council.proposals.slice(0, 5).map((proposal) => {
+                      const debate = council.proposalDebate.items.find((item) => item.proposalId === proposal.id);
+                      return (
+                        <div key={proposal.id} className="px-4 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium">{proposal.title}</p>
+                            <span className="text-xs uppercase text-muted-foreground">
+                              {proposal.priority}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Owner: {proposal.suggestedOwnerRole ?? "n/a"} · DoD: {proposal.definitionOfDone.length} items · Debate: {debate?.consensus ?? "n/a"}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <PluginSlotOutlet
             slotTypes={["dashboardWidget"]}

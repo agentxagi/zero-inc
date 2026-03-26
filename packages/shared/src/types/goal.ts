@@ -12,3 +12,22 @@ export interface Goal {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface GoalProgress {
+  goalId: string;
+  goalTitle: string;
+  goalLevel: GoalLevel;
+  goalStatus: GoalStatus;
+  totalIssues: number;
+  byStatus: Record<string, number>;
+  done: number;
+  rawDone: number;
+  unverifiedDone: number;
+  remaining: number;
+  completionPercent: number;
+  rawCompletionPercent: number;
+  velocityPerDay: number;
+  completedLast7Days: number;
+  rawCompletedLast7Days: number;
+  estimatedDaysToComplete: number | null;
+}

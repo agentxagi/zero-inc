@@ -26,6 +26,174 @@ export interface DashboardSummary {
   };
 }
 
+export type ProductCouncilPillar = "open_source" | "enterprise" | "operating_model";
+export type ProductCouncilProposalPriority = "critical" | "high" | "medium" | "low";
+export type ProductCouncilDebateConsensus = "go" | "revise" | "hold";
+export type ProductCouncilDebateStance = "support" | "support_with_changes" | "block";
+export type ProductCouncilValueDeliveryStatus = "critical" | "weak" | "moderate" | "strong";
+
+export interface ProductCouncilMacroProgram {
+  key: ProductCouncilPillar;
+  title: string;
+  goalId: string | null;
+  goalStatus: string | null;
+  cycleKey: string;
+  cycleGoalId: string | null;
+  cycleGoalStatus: string | null;
+}
+
+export interface ProductCouncilMacroProgramsSummary {
+  cycleKey: string;
+  rootGoalId: string | null;
+  rootCreated?: boolean;
+  createdProgramKeys?: ProductCouncilPillar[];
+  createdCycleKeys?: ProductCouncilPillar[];
+  programs: ProductCouncilMacroProgram[];
+}
+
+export interface ProductCouncilGoalSummary {
+  id: string;
+  title: string;
+  status: string;
+  level: string;
+}
+
+export interface ProductCouncilMilestone {
+  id: string;
+  pillar: ProductCouncilPillar;
+  title: string;
+  status: "done" | "partial" | "missing";
+  evidenceCount: number;
+  evidenceIssueIds: string[];
+}
+
+export interface ProductCouncilDiscussionEntry {
+  role: "pm" | "cto" | "reviewer";
+  speaker: string;
+  summary: string;
+  concerns: string[];
+  recommendation: string;
+}
+
+export interface ProductCouncilProposal {
+  id: string;
+  sourceMilestoneId: string;
+  pillar: ProductCouncilPillar;
+  title: string;
+  description: string;
+  priority: ProductCouncilProposalPriority;
+  suggestedOwnerRole: string | null;
+  suggestedAssigneeAgentId: string | null;
+  suggestedAssigneeName: string | null;
+  definitionOfDone: string[];
+}
+
+export interface ProductCouncilProposalDebateSpeaker {
+  role: "pm" | "cto" | "qa" | "researcher";
+  speaker: string;
+  stance: ProductCouncilDebateStance;
+  rationale: string;
+  mustHave: string[];
+}
+
+export interface ProductCouncilProposalDebateItem {
+  proposalId: string;
+  requiresDebate: boolean;
+  consensus: ProductCouncilDebateConsensus;
+  confidence: number;
+  summary: string;
+  speakers: ProductCouncilProposalDebateSpeaker[];
+}
+
+export interface ProductCouncilValueDelivery {
+  windowDays: number;
+  score: number;
+  status: ProductCouncilValueDeliveryStatus;
+  totalDoneLast7Days: number;
+  verifiedDoneLast7Days: number;
+  opsDoneLast7Days: number;
+  opsSharePercent: number;
+  outputsLast7Days: number;
+  pillarCoveragePercent: number;
+  pillarsWithVerifiedDelivery: Record<ProductCouncilPillar, number>;
+  components: {
+    throughputScore: number;
+    verificationScore: number;
+    coverageScore: number;
+    reviewScore: number;
+    evidenceScore: number;
+    opsPenalty: number;
+  };
+}
+
+export interface ProductCouncilReport {
+  timestamp: string;
+  companyId: string;
+  macroPrograms: ProductCouncilMacroProgramsSummary | null;
+  teamModel: {
+    source: string;
+    principles: string[];
+  };
+  goal: ProductCouncilGoalSummary | null;
+  workload: {
+    companyOpenIssues: number;
+    executionActive: number;
+    staleExecutionActive: number;
+    executionBacklog: number;
+    staleExecutionBacklog: number;
+    executionStockByPillar: Record<ProductCouncilPillar, number>;
+    executionMinStockByPillar: Record<ProductCouncilPillar, number>;
+    missingExecutionStock: ProductCouncilPillar[];
+    goalOpenByStatus: {
+      backlog: number;
+      todo: number;
+      in_progress: number;
+      in_review: number;
+      blocked: number;
+    };
+  };
+  progress: {
+    issueBasedPercent: number;
+    rawIssueBasedPercent: number;
+    outcomeBasedPercent: number;
+    weeklyValueScore: number;
+    doneIssues: number;
+    rawDoneIssues: number;
+    unverifiedDoneIssues: number;
+    openIssues: number;
+    doneLast24h: number;
+    verifiedDoneLast24h: number;
+    reviewCoveragePercent: number | null;
+    outputsLast7Days: number;
+  };
+  valueDelivery: ProductCouncilValueDelivery;
+  milestones: ProductCouncilMilestone[];
+  councilDiscussion: ProductCouncilDiscussionEntry[];
+  gating: {
+    shouldGenerate: boolean;
+    reason: string;
+    forcedByAntiLoop: boolean;
+    opsProposalsSkipped: number;
+  };
+  antiLoop: {
+    stagnationWindowMinutes: number;
+    staleExecutionActive: number;
+    forcedByAntiLoop: boolean;
+    opsProposalsSkipped: number;
+  };
+  proposalDebate: {
+    enabled: boolean;
+    summary: {
+      reviewed: number;
+      go: number;
+      revise: number;
+      hold: number;
+    };
+    items: ProductCouncilProposalDebateItem[];
+  };
+  proposals: ProductCouncilProposal[];
+}
+
 export interface HumanQueueItem {
   issueId: string;
   identifier: string | null;
