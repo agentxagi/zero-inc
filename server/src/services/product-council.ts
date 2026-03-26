@@ -3,7 +3,7 @@ import type { Db } from "@zeroinc/db";
 import { agents, goals, issueWorkProducts, issues } from "@zeroinc/db";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { getDefaultCompanyGoal } from "./goals.js";
+import { ensureEvergreenMacroPrograms, getDefaultCompanyGoal, listMacroProgramState } from "./goals.js";
 
 type GoalLike = {
   id: string;
@@ -45,6 +45,23 @@ type AgentLike = {
   name: string;
   role: string;
   status: string;
+};
+
+type MacroProgramSummaryLike = {
+  cycleKey: string;
+  rootGoalId: string | null;
+  rootCreated?: boolean;
+  createdProgramKeys?: string[];
+  createdCycleKeys?: string[];
+  programs: Array<{
+    key: "open_source" | "enterprise" | "operating_model";
+    title: string;
+    goalId: string | null;
+    goalStatus: string | null;
+    cycleKey: string;
+    cycleGoalId: string | null;
+    cycleGoalStatus: string | null;
+  }>;
 };
 
 type OutcomeMilestoneDefinition = {
@@ -438,6 +455,7 @@ function countRecentOutputs(days = 7, root = "/opt/paperclip/outputs", now = new
 
 export function buildProductCouncilReport(input: {
   companyId: string;
+  macroPrograms?: MacroProgramSummaryLike | null;
   goal: GoalLike | null;
   goalDoneIssues: IssueLike[];
   doneIssueWorkProducts?: WorkProductLike[];
@@ -707,6 +725,7 @@ export function buildProductCouncilReport(input: {
   return {
     timestamp: now.toISOString(),
     companyId: input.companyId,
+    macroPrograms: input.macroPrograms ?? null,
     teamModel: COUNCIL_TEAM_MODEL,
     goal: input.goal
       ? {
@@ -790,9 +809,12 @@ export function productCouncilService(db: Db) {
   return {
     analyze: async (
       companyId: string,
-      opts?: { goalId?: string | null; maxProposals?: number; now?: Date },
+      opts?: { goalId?: string | null; maxProposals?: number; now?: Date; ensureMacroPrograms?: boolean },
     ) => {
       const now = opts?.now ?? new Date();
+      const macroPrograms = opts?.ensureMacroPrograms
+        ? await ensureEvergreenMacroPrograms(db, companyId, now)
+        : await listMacroProgramState(db, companyId, now);
       const goal = await resolveGoalForCouncil(db, companyId, opts?.goalId ?? null);
       const childGoalIds = goal
         ? await db
@@ -917,6 +939,7 @@ export function productCouncilService(db: Db) {
 
       return buildProductCouncilReport({
         companyId,
+        macroPrograms,
         goal,
         goalDoneIssues,
         doneIssueWorkProducts,

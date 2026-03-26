@@ -212,9 +212,11 @@ export function dashboardRoutes(db: Db) {
       const maxProposalsRaw = req.query.maxProposals;
       const maxProposals = typeof maxProposalsRaw === "string" ? Number.parseInt(maxProposalsRaw, 10) : undefined;
       const goalId = typeof req.query.goalId === "string" ? req.query.goalId : undefined;
+      const ensurePrograms = req.query.ensurePrograms === "true";
       const data = await council.analyze(companyId, {
         goalId: goalId && goalId.length > 0 ? goalId : undefined,
         maxProposals: Number.isFinite(maxProposals) ? maxProposals : undefined,
+        ensureMacroPrograms: ensurePrograms,
       });
       res.json(data);
     } catch (error) {
@@ -244,6 +246,7 @@ export function dashboardRoutes(db: Db) {
       const report = await council.analyze(companyId, {
         goalId: body.goalId ?? undefined,
         maxProposals: body.maxProposals,
+        ensureMacroPrograms: true,
       });
 
       if (!report.gating.shouldGenerate) {

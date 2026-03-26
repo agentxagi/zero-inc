@@ -466,6 +466,7 @@ All endpoints are under `/api` and return JSON.
 
 - `GET /companies/:companyId/goals`
 - `POST /companies/:companyId/goals`
+- `POST /companies/:companyId/goals/ensure-programs` (idempotent seed/renew of macro programs + current quarter cycle goals)
 - `GET /goals/:goalId`
 - `PATCH /goals/:goalId`
 - `DELETE /goals/:goalId` (soft delete optional, hard delete board-only)
@@ -568,6 +569,7 @@ Product Council anti-loop hardening:
 
 - if execution is active but stagnant for 30+ minutes and milestones are still missing, generation is forced with a concrete unblock proposal
 - per cycle, operating-model (`ops`) meta-proposals are capped to 1 to reduce repetitive OPS noise
+- optional query `ensurePrograms=true` on product-council GET can materialize/refresh evergreen macro programs before analysis
 
 ## 10.9 Error Semantics
 

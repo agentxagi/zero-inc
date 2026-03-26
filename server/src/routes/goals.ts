@@ -16,6 +16,32 @@ export function goalRoutes(db: Db) {
     res.json(result);
   });
 
+  router.post("/companies/:companyId/goals/ensure-programs", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const ensured = await svc.ensureEvergreenMacroPrograms(companyId);
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "goal.programs_ensured",
+      entityType: "goal",
+      entityId: ensured.rootGoalId ?? companyId,
+      details: {
+        rootGoalId: ensured.rootGoalId,
+        cycleKey: ensured.cycleKey,
+        rootCreated: ensured.rootCreated,
+        createdProgramKeys: ensured.createdProgramKeys,
+        createdCycleKeys: ensured.createdCycleKeys,
+      },
+    });
+
+    res.json(ensured);
+  });
+
   router.get("/goals/:id", async (req, res) => {
     const id = req.params.id as string;
     const goal = await svc.getById(id);

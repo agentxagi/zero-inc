@@ -4078,7 +4078,10 @@ export function heartbeatService(db: Db) {
     }
     if (agent.role === "pm" && !enrichedContextSnapshot.productCouncilSummary) {
       try {
-        const summary = await productCouncil.analyze(agent.companyId, { maxProposals: 5 });
+        const summary = await productCouncil.analyze(agent.companyId, {
+          maxProposals: 5,
+          ensureMacroPrograms: true,
+        });
         enrichedContextSnapshot.productCouncilSummary = summary;
       } catch (err) {
         logger.warn(`[heartbeat] Failed to inject product council summary for PM agent ${agentId}: ${err}`);

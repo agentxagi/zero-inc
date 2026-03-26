@@ -53,6 +53,7 @@ Arquivo: `server/src/services/heartbeat.ts`
 5. P1.1 Phase Gate Engine (transições permitidas + fase explícita por task): implementado.
 6. P1.2 Reviewer specialization lanes (`code|security|ux|ops` + SLA separado): implementado.
 7. P1.3 PM anti-loop hardening (estagnação força geração + limite de OPS meta-task por ciclo): implementado.
+8. P2.1 Programas permanentes por objetivo macro (Open Source, Enterprise, Operating Model + ciclos trimestrais): implementado.
 
 ## P0 (executar agora)
 
