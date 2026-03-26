@@ -381,15 +381,23 @@ Allowed transitions:
 - `backlog -> todo | cancelled`
 - `todo -> in_progress | blocked | cancelled`
 - `in_progress -> in_review | blocked | done | cancelled`
-- `in_review -> in_progress | done | cancelled`
+- `in_review -> in_progress | blocked | done | cancelled`
 - `blocked -> todo | in_progress | cancelled`
-- terminal: `done`, `cancelled`
+- reopen exception: `done|cancelled -> todo` (explicit reopen flow)
 
 Side effects:
 
 - entering `in_progress` sets `started_at` if null
 - entering `done` sets `completed_at`
 - entering `cancelled` sets `cancelled_at`
+
+Phase mapping (explicit in API payload as `workflowPhase`):
+
+- `backlog -> discovery`
+- `todo -> planning`
+- `in_progress|blocked -> implementation`
+- `in_review -> review`
+- `done|cancelled -> release`
 
 ## 8.3 Approval Status
 

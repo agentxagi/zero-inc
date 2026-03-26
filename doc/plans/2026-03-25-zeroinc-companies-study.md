@@ -50,6 +50,7 @@ Arquivo: `server/src/services/heartbeat.ts`
 2. P0.2 Discovery Engine + estoque por pilar: implementado.
 3. P0.3 Contrato explícito de bloqueio humano + inbox SLA: implementado.
 4. P0.4 Guardião de ciclo de vida de processos locais: implementado (watchdog com limiares de pressão, auto-remediação de detached stale e telemetria por run/pid).
+5. P1.1 Phase Gate Engine (transições permitidas + fase explícita por task): implementado.
 
 ## P0 (executar agora)
 

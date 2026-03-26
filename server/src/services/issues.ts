@@ -22,7 +22,15 @@ import {
 } from "@zeroinc/db";
 import { delegationRulesService, type RuleAction } from "./delegation-rules.js";
 import { smartAssignerService } from "./smart-assigner.js";
-import { extractAgentMentionIds, extractProjectMentionIds } from "@zeroinc/shared";
+import {
+  extractAgentMentionIds,
+  extractProjectMentionIds,
+  ISSUE_STATUSES,
+  ISSUE_STATUS_TRANSITIONS,
+  ISSUE_WORKFLOW_PHASE_BY_STATUS,
+  type IssueStatus,
+  type IssueWorkflowPhase,
+} from "@zeroinc/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import {
   defaultIssueExecutionWorkspaceSettingsForProject,
@@ -38,7 +46,8 @@ import { qualityGateService } from "./quality-gate.js";
 import { reviewPipelineService, type ReviewPipelineWakeupDeps } from "./review-pipeline.js";
 import { humanNotificationService } from "./human-notification.js";
 
-const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
+const ALL_ISSUE_STATUSES = [...ISSUE_STATUSES];
+const ALL_ISSUE_STATUS_SET = new Set<string>(ISSUE_STATUSES);
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
 
 function defaultHumanSlaHours(priority: string | null | undefined): number {
@@ -55,11 +64,23 @@ function defaultHumanSlaHours(priority: string | null | undefined): number {
   }
 }
 
-function assertTransition(from: string, to: string) {
+export function assertIssueStatusTransition(from: string, to: string) {
   if (from === to) return;
-  if (!ALL_ISSUE_STATUSES.includes(to)) {
+  if (!ALL_ISSUE_STATUS_SET.has(to)) {
     throw conflict(`Unknown issue status: ${to}`);
   }
+  if (!ALL_ISSUE_STATUS_SET.has(from)) {
+    throw conflict(`Unknown issue status: ${from}`);
+  }
+  const allowed = ISSUE_STATUS_TRANSITIONS[from as IssueStatus] ?? [];
+  if (!allowed.includes(to as IssueStatus)) {
+    throw conflict(`Invalid issue status transition: ${from} -> ${to}`);
+  }
+}
+
+export function issueWorkflowPhaseForStatus(status: string): IssueWorkflowPhase {
+  const normalized = status as IssueStatus;
+  return ISSUE_WORKFLOW_PHASE_BY_STATUS[normalized] ?? "implementation";
 }
 
 function applyStatusSideEffects(
@@ -108,7 +129,7 @@ type IssueActiveRunRow = {
   finishedAt: Date | null;
   createdAt: Date;
 };
-type IssueWithLabels = IssueRow & { labels: IssueLabelRow[]; labelIds: string[] };
+type IssueWithLabels = IssueRow & { labels: IssueLabelRow[]; labelIds: string[]; workflowPhase: IssueWorkflowPhase };
 type IssueWithLabelsAndRun = IssueWithLabels & { activeRun: IssueActiveRunRow | null };
 type IssueUserCommentStats = {
   issueId: string;
@@ -358,6 +379,7 @@ async function withIssueLabels(dbOrTx: any, rows: IssueRow[]): Promise<IssueWith
       ...row,
       labels: issueLabels,
       labelIds: issueLabels.map((label) => label.id),
+      workflowPhase: issueWorkflowPhaseForStatus(row.status),
     };
   });
 }
@@ -1094,7 +1116,7 @@ export function issueService(db: Db, wakeupDeps?: ReviewPipelineWakeupDeps) {
       }
 
       if (issueData.status) {
-        assertTransition(existing.status, issueData.status);
+        assertIssueStatusTransition(existing.status, issueData.status);
       }
 
       const patch: Partial<typeof issues.$inferInsert> = {

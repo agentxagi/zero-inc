@@ -120,6 +120,36 @@ export const ISSUE_STATUSES = [
 ] as const;
 export type IssueStatus = (typeof ISSUE_STATUSES)[number];
 
+export const ISSUE_WORKFLOW_PHASES = [
+  "discovery",
+  "planning",
+  "implementation",
+  "review",
+  "release",
+] as const;
+export type IssueWorkflowPhase = (typeof ISSUE_WORKFLOW_PHASES)[number];
+
+export const ISSUE_WORKFLOW_PHASE_BY_STATUS: Readonly<Record<IssueStatus, IssueWorkflowPhase>> = {
+  backlog: "discovery",
+  todo: "planning",
+  in_progress: "implementation",
+  blocked: "implementation",
+  in_review: "review",
+  done: "release",
+  cancelled: "release",
+};
+
+export const ISSUE_STATUS_TRANSITIONS: Readonly<Record<IssueStatus, readonly IssueStatus[]>> = {
+  backlog: ["todo", "cancelled"],
+  todo: ["in_progress", "blocked", "cancelled"],
+  in_progress: ["in_review", "blocked", "done", "cancelled"],
+  in_review: ["in_progress", "blocked", "done", "cancelled"],
+  blocked: ["todo", "in_progress", "cancelled"],
+  // Explicit reopen path used by issue-comment reopen flow.
+  done: ["todo"],
+  cancelled: ["todo"],
+};
+
 export const ISSUE_PRIORITIES = ["critical", "high", "medium", "low"] as const;
 export type IssuePriority = (typeof ISSUE_PRIORITIES)[number];
 
