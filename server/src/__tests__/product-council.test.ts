@@ -29,6 +29,32 @@ function issue(overrides?: Partial<{
   };
 }
 
+function workProduct(overrides?: Partial<{
+  issueId: string;
+  type: string;
+  provider: string;
+  title: string;
+  summary: string | null;
+  url: string | null;
+  status: string;
+  reviewState: string;
+  isPrimary: boolean;
+  updatedAt: Date;
+}>) {
+  return {
+    issueId: overrides?.issueId ?? "issue-1",
+    type: overrides?.type ?? "pull_request",
+    provider: overrides?.provider ?? "github",
+    title: overrides?.title ?? "PR #1",
+    summary: overrides?.summary ?? "Implemented feature",
+    url: overrides?.url ?? "https://example.com/pr/1",
+    status: overrides?.status ?? "approved",
+    reviewState: overrides?.reviewState ?? "approved",
+    isPrimary: overrides?.isPrimary ?? true,
+    updatedAt: overrides?.updatedAt ?? new Date("2026-03-25T12:00:00.000Z"),
+  };
+}
+
 const defaultGoal = {
   id: "goal-1",
   title: "ZeroInc Open Source and Enterprise",
@@ -55,6 +81,7 @@ describe("product-council", () => {
       companyId: "company-1",
       goal: defaultGoal,
       goalDoneIssues: [],
+      doneIssueWorkProducts: [],
       goalOpenIssues: [
         issue({
           id: "open-1",
@@ -89,6 +116,7 @@ describe("product-council", () => {
       companyId: "company-1",
       goal: defaultGoal,
       goalDoneIssues: [],
+      doneIssueWorkProducts: [],
       goalOpenIssues: [],
       companyOpenIssues: [],
       agentRows: defaultAgents,
@@ -123,6 +151,10 @@ describe("product-council", () => {
           completedAt: new Date("2026-03-25T16:30:00.000Z"),
         }),
       ],
+      doneIssueWorkProducts: [
+        workProduct({ issueId: "done-1", status: "approved" }),
+        workProduct({ issueId: "done-2", status: "ready_for_review" }),
+      ],
       goalOpenIssues: [],
       companyOpenIssues: [],
       agentRows: defaultAgents,
@@ -133,5 +165,34 @@ describe("product-council", () => {
 
     expect(report.progress.reviewCoveragePercent).toBe(50);
     expect(report.progress.doneLast24h).toBe(2);
+    expect(report.progress.doneIssues).toBe(1);
+    expect(report.progress.unverifiedDoneIssues).toBe(1);
+  });
+
+  it("does not count done issues without work products as verified progress", () => {
+    const report = buildProductCouncilReport({
+      companyId: "company-1",
+      goal: defaultGoal,
+      goalDoneIssues: [
+        issue({
+          id: "done-1",
+          identifier: "VAL-30",
+          title: "[FEATURE] Ship landing improvements",
+          reviewCount: 1,
+        }),
+      ],
+      doneIssueWorkProducts: [],
+      goalOpenIssues: [],
+      companyOpenIssues: [],
+      agentRows: defaultAgents,
+      outputsLast7Days: 0,
+      now: new Date("2026-03-25T18:00:00.000Z"),
+      maxProposals: 5,
+    });
+
+    expect(report.progress.doneIssues).toBe(0);
+    expect(report.progress.rawDoneIssues).toBe(1);
+    expect(report.progress.unverifiedDoneIssues).toBe(1);
+    expect(report.progress.issueBasedPercent).toBe(0);
   });
 });

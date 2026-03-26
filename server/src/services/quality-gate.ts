@@ -1,6 +1,6 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
-import { agents, heartbeatRuns, issueComments, issues } from "@zeroinc/db";
+import { agents, heartbeatRuns, issueComments, issueWorkProducts, issues } from "@zeroinc/db";
 import { DEFAULT_QUALITY_GATE_CONFIG, type QualityGateConfig } from "@zeroinc/shared";
 
 // ---------------------------------------------------------------------------
@@ -42,6 +42,53 @@ const OUTPUT_REQUIRED_TITLE_KEYWORDS = [
   "report",
   "metrics",
 ];
+const STRUCTURED_DELIVERABLE_PREFIXES = new Set([
+  "BUG",
+  "FEATURE",
+  "CODE",
+  "INFRA",
+  "SHIP",
+  "ENTERPRISE",
+  "OPEN SOURCE",
+  "BUILD",
+  "DOCS",
+  "PRODUCT",
+]);
+const STRUCTURED_DELIVERABLE_TITLE_KEYWORDS = [
+  "feature",
+  "bug",
+  "deploy",
+  "readme",
+  "landing",
+  "quickstart",
+  "auth",
+  "enterprise",
+  "documentation",
+  "docs",
+];
+const QUALIFYING_WORK_PRODUCT_STATUSES = new Set([
+  "active",
+  "ready_for_review",
+  "approved",
+  "merged",
+  "closed",
+]);
+
+function extractIssuePrefix(title: string): string | null {
+  const match = title.match(/^\s*\[([^\]]+)\]/);
+  return match ? match[1]!.trim().toUpperCase() : null;
+}
+
+function requiresStructuredDeliverable(issue: Pick<IssueContext, "title" | "originKind">): boolean {
+  if (issue.originKind === "routine_execution") return true;
+  const prefix = extractIssuePrefix(issue.title ?? "");
+  if (prefix && STRUCTURED_DELIVERABLE_PREFIXES.has(prefix)) return true;
+  const titleLower = (issue.title ?? "").toLowerCase();
+  return (
+    OUTPUT_REQUIRED_TITLE_KEYWORDS.some((keyword) => titleLower.includes(keyword)) ||
+    STRUCTURED_DELIVERABLE_TITLE_KEYWORDS.some((keyword) => titleLower.includes(keyword))
+  );
+}
 
 export type QualityState = "excellent" | "good" | "fair" | "poor" | "critical" | "warming_up";
 
@@ -287,6 +334,50 @@ export function qualityGateService(db: Db) {
     };
   }
 
+  async function checkStructuredDeliverable(issue: IssueContext): Promise<QualityCheckResult> {
+    if (!requiresStructuredDeliverable(issue)) {
+      return {
+        pass: true,
+        message: "Structured deliverable not required for this task category.",
+        severity: "info",
+      };
+    }
+
+    const products = await db
+      .select({
+        id: issueWorkProducts.id,
+        type: issueWorkProducts.type,
+        status: issueWorkProducts.status,
+        title: issueWorkProducts.title,
+      })
+      .from(issueWorkProducts)
+      .where(and(eq(issueWorkProducts.companyId, issue.companyId), eq(issueWorkProducts.issueId, issue.id)))
+      .limit(20);
+
+    const qualifying = products.filter((product) =>
+      QUALIFYING_WORK_PRODUCT_STATUSES.has(String(product.status ?? "").toLowerCase()),
+    );
+
+    if (qualifying.length === 0) {
+      return {
+        pass: false,
+        message:
+          "No structured work product attached. Add at least one /api/issues/:id/work-products entry before marking this task as done.",
+        severity: "blocker",
+      };
+    }
+
+    const summary = qualifying
+      .slice(0, 3)
+      .map((product) => `${product.type}:${product.status}`)
+      .join(", ");
+    return {
+      pass: true,
+      message: `Structured deliverable evidence found (${qualifying.length} work product(s): ${summary}).`,
+      severity: "info",
+    };
+  }
+
   async function checkNoStaleLock(issue: IssueContext): Promise<QualityCheckResult> {
     // No lock fields set — lock is properly released
     if (!issue.executionLockedAt && !issue.executionRunId) {
@@ -334,6 +425,7 @@ export function qualityGateService(db: Db) {
     checks.push(
       await checkVerificationEvidence(issue, config.requireVerificationEvidence, options?.pendingCommentBody),
     );
+    checks.push(await checkStructuredDeliverable(issue));
     checks.push(await checkDurationSanity(issue, config.requireMinimumDuration));
     checks.push(await checkNoStaleLock(issue));
 

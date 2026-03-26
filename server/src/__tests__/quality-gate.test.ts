@@ -5,7 +5,7 @@ import {
   getQualityState,
 } from "../services/quality-gate.ts";
 import { DEFAULT_QUALITY_GATE_CONFIG } from "@zeroinc/shared";
-import { issueComments, agents, heartbeatRuns } from "@zeroinc/db";
+import { issueComments, agents, heartbeatRuns, issueWorkProducts } from "@zeroinc/db";
 
 // ---------------------------------------------------------------------------
 // Mock DB — routes queries by table reference
@@ -15,6 +15,7 @@ function createMockDb(options?: {
   commentCount?: number;
   agentRow?: Record<string, unknown> | null;
   heartbeatRunRow?: Record<string, unknown> | null;
+  workProductsRows?: Record<string, unknown>[];
 }) {
   const commentCount = options?.commentCount ?? 1;
   const agentRow = options?.agentRow !== undefined
@@ -29,6 +30,7 @@ function createMockDb(options?: {
         lastReopenReasons: [],
       };
   const heartbeatRunRow = options?.heartbeatRunRow ?? null;
+  const workProductsRows = options?.workProductsRows ?? [];
 
   function makeWhereResult(rows: Record<string, unknown>[]) {
     const direct = Promise.resolve(rows) as Promise<Record<string, unknown>[]> & {
@@ -61,6 +63,11 @@ function createMockDb(options?: {
       const rows = heartbeatRunRow ? [heartbeatRunRow] : [];
       return {
         where: vi.fn().mockReturnValue(makeWhereResult(rows)),
+      };
+    }
+    if (table === issueWorkProducts) {
+      return {
+        where: vi.fn().mockReturnValue(makeWhereResult(workProductsRows)),
       };
     }
     // agents table or any other
@@ -251,7 +258,7 @@ describe("Quality Gate Service", () => {
       const result = await gate.runChecks(ctx, DEFAULT_QUALITY_GATE_CONFIG);
 
       expect(result.passed).toBe(true);
-      expect(result.checks.length).toBe(4);
+      expect(result.checks.length).toBe(5);
       expect(result.checks.every((c) => c.pass)).toBe(true);
     });
 
@@ -306,7 +313,44 @@ describe("Quality Gate Service", () => {
         const config = { ...DEFAULT_QUALITY_GATE_CONFIG, requireComment: false };
         const result = await gate.runChecks(ctx, config);
 
-        expect(result.checks.length).toBe(3);
+        expect(result.checks.length).toBe(4);
+      });
+    });
+
+    describe("structured deliverable check", () => {
+      it("requires a work product for delivery-oriented tasks", async () => {
+        const gate = qualityGateService(createMockDb({ commentCount: 1, workProductsRows: [] }));
+        const ctx = baseIssueContext({
+          title: "[FEATURE] Build enterprise auth hardening",
+        });
+        const result = await gate.runChecks(ctx, DEFAULT_QUALITY_GATE_CONFIG);
+
+        const deliverableCheck = result.checks.find((c) => c.message.includes("structured work product"));
+        expect(deliverableCheck).toBeDefined();
+        expect(deliverableCheck!.pass).toBe(false);
+        expect(deliverableCheck!.severity).toBe("blocker");
+      });
+
+      it("passes when qualifying work product evidence exists", async () => {
+        const gate = qualityGateService(createMockDb({
+          commentCount: 1,
+          workProductsRows: [
+            {
+              id: "wp-1",
+              type: "pull_request",
+              status: "approved",
+              title: "PR #123",
+            },
+          ],
+        }));
+        const ctx = baseIssueContext({
+          title: "[FEATURE] Build enterprise auth hardening",
+        });
+        const result = await gate.runChecks(ctx, DEFAULT_QUALITY_GATE_CONFIG);
+
+        const deliverableCheck = result.checks.find((c) => c.message.includes("Structured deliverable evidence"));
+        expect(deliverableCheck).toBeDefined();
+        expect(deliverableCheck!.pass).toBe(true);
       });
     });
 

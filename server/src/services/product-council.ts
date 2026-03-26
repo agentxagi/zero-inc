@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
-import { agents, goals, issues } from "@zeroinc/db";
+import { agents, goals, issueWorkProducts, issues } from "@zeroinc/db";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { getDefaultCompanyGoal } from "./goals.js";
@@ -27,6 +27,19 @@ type IssueLike = {
   reviewCount: number;
 };
 
+type WorkProductLike = {
+  issueId: string;
+  type: string;
+  provider: string;
+  title: string;
+  summary: string | null;
+  url: string | null;
+  status: string;
+  reviewState: string;
+  isPrimary: boolean;
+  updatedAt: Date;
+};
+
 type AgentLike = {
   id: string;
   name: string;
@@ -43,6 +56,8 @@ type OutcomeMilestoneDefinition = {
 };
 
 const OPERATIONS_PREFIXES = new Set(["OPS", "SYSTEM", "AUDIT", "REVIEW", "ONGOING"]);
+const ENGINEERING_PREFIXES = new Set(["BUG", "FEATURE", "CODE", "INFRA", "SHIP", "ENTERPRISE", "OPEN SOURCE", "BUILD"]);
+const QUALIFYING_WORK_PRODUCT_STATUSES = new Set(["active", "ready_for_review", "approved", "merged", "closed"]);
 const OPERATIONS_TITLE_PATTERNS = [
   /\bstale\b/i,
   /watchdog/i,
@@ -147,6 +162,36 @@ function extractPrefix(title: string): string | null {
   return match ? match[1]!.trim().toUpperCase() : null;
 }
 
+function isEngineeringOutcomeIssue(issue: Pick<IssueLike, "title">): boolean {
+  const prefix = extractPrefix(issue.title);
+  return prefix != null && ENGINEERING_PREFIXES.has(prefix);
+}
+
+function qualifiesWorkProduct(product: Pick<WorkProductLike, "status">): boolean {
+  return QUALIFYING_WORK_PRODUCT_STATUSES.has((product.status ?? "").toLowerCase());
+}
+
+function buildEvidenceText(
+  issue: Pick<IssueLike, "title" | "description">,
+  workProducts: Array<Pick<WorkProductLike, "type" | "provider" | "title" | "summary" | "url" | "status">>,
+): string {
+  const parts = [
+    issue.title,
+    issue.description ?? "",
+    ...workProducts.map((product) =>
+      [
+        product.type,
+        product.provider,
+        product.title,
+        product.summary ?? "",
+        product.url ?? "",
+        product.status,
+      ].join(" "),
+    ),
+  ];
+  return parts.join("\n").toLowerCase();
+}
+
 export function isOperationalNoiseIssue(issue: Pick<IssueLike, "title" | "originKind">): boolean {
   if (issue.originKind === "routine_execution") return true;
   const prefix = extractPrefix(issue.title);
@@ -155,7 +200,7 @@ export function isOperationalNoiseIssue(issue: Pick<IssueLike, "title" | "origin
 }
 
 function normalizeIssueText(issue: Pick<IssueLike, "title" | "description">): string {
-  return `${issue.title}\n${issue.description ?? ""}`.toLowerCase();
+  return buildEvidenceText(issue, []);
 }
 
 function hasPatternMatch(issue: Pick<IssueLike, "title" | "description">, patterns: RegExp[]): boolean {
@@ -163,11 +208,11 @@ function hasPatternMatch(issue: Pick<IssueLike, "title" | "description">, patter
   return patterns.some((pattern) => pattern.test(text));
 }
 
-function computeMilestones(doneIssues: IssueLike[]) {
+function computeMilestones(doneIssues: Array<{ issue: IssueLike; evidenceText: string }>) {
   const rows = OUTCOME_MILESTONES.map((milestone) => {
-    const evidence = doneIssues.filter((issue) => hasPatternMatch(issue, milestone.patterns));
+    const evidence = doneIssues.filter((entry) => milestone.patterns.some((pattern) => pattern.test(entry.evidenceText)));
     const evidenceIds = evidence
-      .map((issue) => issue.identifier)
+      .map((entry) => entry.issue.identifier)
       .filter((value): value is string => Boolean(value))
       .slice(0, 5);
     const status =
@@ -373,6 +418,7 @@ export function buildProductCouncilReport(input: {
   companyId: string;
   goal: GoalLike | null;
   goalDoneIssues: IssueLike[];
+  doneIssueWorkProducts?: WorkProductLike[];
   goalOpenIssues: IssueLike[];
   companyOpenIssues: IssueLike[];
   agentRows: AgentLike[];
@@ -383,12 +429,42 @@ export function buildProductCouncilReport(input: {
   const now = input.now ?? new Date();
   const maxProposals = Math.min(Math.max(input.maxProposals ?? 5, 1), 8);
 
-  const issueBasedTotal = input.goalDoneIssues.length + input.goalOpenIssues.length;
+  const workProductsByIssueId = new Map<string, WorkProductLike[]>();
+  for (const product of input.doneIssueWorkProducts ?? []) {
+    const existing = workProductsByIssueId.get(product.issueId);
+    if (existing) existing.push(product);
+    else workProductsByIssueId.set(product.issueId, [product]);
+  }
+
+  const doneEvidence = input.goalDoneIssues.map((issue) => {
+    const qualifyingWorkProducts = (workProductsByIssueId.get(issue.id) ?? []).filter(qualifiesWorkProduct);
+    const hasQualifyingWorkProduct = qualifyingWorkProducts.length > 0;
+    const requiresReview = isEngineeringOutcomeIssue(issue);
+    const hasRequiredReview = !requiresReview || issue.reviewCount > 0;
+    return {
+      issue,
+      evidenceText: buildEvidenceText(issue, qualifyingWorkProducts),
+      verified: hasQualifyingWorkProduct && hasRequiredReview,
+    };
+  });
+  const verifiedDoneEvidence = doneEvidence.filter((entry) => entry.verified);
+  const unverifiedDoneEvidence = doneEvidence.filter((entry) => !entry.verified);
+
+  const issueBasedTotal = verifiedDoneEvidence.length + input.goalOpenIssues.length;
   const issueBasedPercent = issueBasedTotal > 0
-    ? Math.round((input.goalDoneIssues.length / issueBasedTotal) * 100)
+    ? Math.round((verifiedDoneEvidence.length / issueBasedTotal) * 100)
+    : 0;
+  const rawIssueBasedTotal = input.goalDoneIssues.length + input.goalOpenIssues.length;
+  const rawIssueBasedPercent = rawIssueBasedTotal > 0
+    ? Math.round((input.goalDoneIssues.length / rawIssueBasedTotal) * 100)
     : 0;
 
-  const milestoneSummary = computeMilestones(input.goalDoneIssues);
+  const milestoneSummary = computeMilestones(
+    verifiedDoneEvidence.map((entry) => ({
+      issue: entry.issue,
+      evidenceText: entry.evidenceText,
+    })),
+  );
   const missingMilestones = milestoneSummary.rows.filter((row) => row.status !== "done");
 
   const goalOpenByStatus = {
@@ -410,18 +486,12 @@ export function buildProductCouncilReport(input: {
   const staleExecutionBacklog = executionBacklog.filter((issue) => issue.updatedAt < backlogStaleCutoff);
   const done24hCutoff = addDays(now, -1);
   const doneLast24h = input.goalDoneIssues.filter((issue) => issue.completedAt && issue.completedAt > done24hCutoff).length;
+  const verifiedDoneLast24h = verifiedDoneEvidence.filter(
+    (entry) => entry.issue.completedAt && entry.issue.completedAt > done24hCutoff,
+  ).length;
 
-  const reviewedEngineeringDone = input.goalDoneIssues.filter((issue) => {
-    const prefix = extractPrefix(issue.title);
-    const engineeringPrefix = prefix != null
-      && new Set(["BUG", "FEATURE", "CODE", "INFRA", "SHIP", "ENTERPRISE", "OPEN SOURCE", "BUILD"]).has(prefix);
-    return engineeringPrefix && issue.reviewCount > 0;
-  }).length;
-  const totalEngineeringDone = input.goalDoneIssues.filter((issue) => {
-    const prefix = extractPrefix(issue.title);
-    return prefix != null
-      && new Set(["BUG", "FEATURE", "CODE", "INFRA", "SHIP", "ENTERPRISE", "OPEN SOURCE", "BUILD"]).has(prefix);
-  }).length;
+  const totalEngineeringDone = doneEvidence.filter((entry) => isEngineeringOutcomeIssue(entry.issue)).length;
+  const reviewedEngineeringDone = verifiedDoneEvidence.filter((entry) => isEngineeringOutcomeIssue(entry.issue)).length;
   const reviewCoveragePercent = totalEngineeringDone > 0
     ? Math.round((reviewedEngineeringDone / totalEngineeringDone) * 100)
     : null;
@@ -441,6 +511,7 @@ export function buildProductCouncilReport(input: {
       concerns: [
         `Backlog de execução não-operacional: ${executionBacklog.length}`,
         `Milestones pendentes/parciais: ${missingMilestones.length}`,
+        `Concluídas sem evidência estruturada: ${unverifiedDoneEvidence.length}`,
       ],
       recommendation:
         executionActive.length > 0
@@ -468,6 +539,9 @@ export function buildProductCouncilReport(input: {
         input.outputsLast7Days > 0
           ? `${input.outputsLast7Days} artefatos encontrados em /opt/paperclip/outputs nos últimos 7 dias.`
           : "Nenhum artefato encontrado em /opt/paperclip/outputs nos últimos 7 dias.",
+        unverifiedDoneEvidence.length > 0
+          ? `${unverifiedDoneEvidence.length} tarefa(s) concluída(s) sem work product qualificado.`
+          : "Todas as tarefas concluídas no escopo possuem work product qualificado.",
       ],
       recommendation: "Toda proposta nova precisa incluir evidência verificável de entrega no DoD.",
     },
@@ -561,10 +635,14 @@ export function buildProductCouncilReport(input: {
     },
     progress: {
       issueBasedPercent,
+      rawIssueBasedPercent,
       outcomeBasedPercent: milestoneSummary.completionPercent,
-      doneIssues: input.goalDoneIssues.length,
+      doneIssues: verifiedDoneEvidence.length,
+      rawDoneIssues: input.goalDoneIssues.length,
+      unverifiedDoneIssues: unverifiedDoneEvidence.length,
       openIssues: input.goalOpenIssues.length,
       doneLast24h,
+      verifiedDoneLast24h,
       reviewCoveragePercent,
       outputsLast7Days: input.outputsLast7Days,
     },
@@ -648,6 +726,29 @@ export function productCouncilService(db: Db) {
             ),
           )
         : [];
+      const goalDoneIssueIds = goalDoneIssues.map((issue) => issue.id);
+      const doneIssueWorkProducts = goalDoneIssueIds.length > 0
+        ? await db
+          .select({
+            issueId: issueWorkProducts.issueId,
+            type: issueWorkProducts.type,
+            provider: issueWorkProducts.provider,
+            title: issueWorkProducts.title,
+            summary: issueWorkProducts.summary,
+            url: issueWorkProducts.url,
+            status: issueWorkProducts.status,
+            reviewState: issueWorkProducts.reviewState,
+            isPrimary: issueWorkProducts.isPrimary,
+            updatedAt: issueWorkProducts.updatedAt,
+          })
+          .from(issueWorkProducts)
+          .where(
+            and(
+              eq(issueWorkProducts.companyId, companyId),
+              inArray(issueWorkProducts.issueId, goalDoneIssueIds),
+            ),
+          )
+        : [];
 
       const goalOpenIssues = scopedGoalIds.length > 0
         ? await db
@@ -716,6 +817,7 @@ export function productCouncilService(db: Db) {
         companyId,
         goal,
         goalDoneIssues,
+        doneIssueWorkProducts,
         goalOpenIssues,
         companyOpenIssues,
         agentRows,
@@ -726,4 +828,3 @@ export function productCouncilService(db: Db) {
     },
   };
 }
-
