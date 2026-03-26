@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "@zeroinc/db";
-import { goals, issues } from "@zeroinc/db";
+import { goals, issueWorkProducts, issues } from "@zeroinc/db";
 
 type GoalReader = Pick<Db, "select">;
 
@@ -39,9 +39,21 @@ const MACRO_PROGRAM_DEFINITIONS: readonly MacroProgramDefinition[] = [
 
 const MACRO_PROGRAM_MARKER_PREFIX = "zeroinc:macro_program=";
 const MACRO_PROGRAM_CYCLE_MARKER_PREFIX = "zeroinc:program_cycle=";
+const ENGINEERING_PREFIXES = new Set(["BUG", "FEATURE", "CODE", "INFRA", "SHIP", "ENTERPRISE", "OPEN SOURCE", "BUILD"]);
+const QUALIFYING_WORK_PRODUCT_STATUSES = ["active", "ready_for_review", "approved", "merged", "closed"] as const;
 
 function normalizeText(value: string | null | undefined): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function extractPrefix(title: string): string | null {
+  const match = title.match(/^\s*\[([^\]]+)\]/);
+  return match ? match[1]!.trim().toUpperCase() : null;
+}
+
+function isEngineeringOutcomeTitle(title: string): boolean {
+  const prefix = extractPrefix(title);
+  return prefix != null && ENGINEERING_PREFIXES.has(prefix);
 }
 
 function macroProgramMarker(key: MacroProgramKey): string {
@@ -385,7 +397,8 @@ export function goalService(db: Db) {
 
     /**
      * Get progress for a goal based on linked issues.
-     * Returns counts by status, completion %, velocity, and estimated completion.
+     * completionPercent and velocity are evidence-based:
+     * a done issue only counts when it has a qualifying work product and required review.
      */
     getProgress: async (goalId: string) => {
       const goal = await db
@@ -423,32 +436,61 @@ export function goalService(db: Db) {
         in_review: 0, done: 0,
       };
       let total = 0;
-      let done = 0;
       for (const row of statusRows) {
         const count = Number(row.count);
         byStatus[row.status] = (byStatus[row.status] ?? 0) + count;
         total += count;
-        if (row.status === "done") done += count;
       }
 
-      const completionPercent = total > 0 ? Math.round((done / total) * 100) : 0;
-
-      // Velocity: issues completed per day over last 7 days
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const [velocityRow] = await db
+      const doneIssues = await db
         .select({
-          count: sql<number>`count(*)`,
+          id: issues.id,
+          title: issues.title,
+          reviewCount: issues.reviewCount,
+          completedAt: issues.completedAt,
         })
         .from(issues)
         .where(
           and(
             inArray(issues.goalId, allGoalIds),
             eq(issues.status, "done"),
-            gte(issues.completedAt, sevenDaysAgo),
           ),
         );
+      const doneIssueIds = doneIssues.map((issue) => issue.id);
+      const qualifyingProducts = doneIssueIds.length === 0
+        ? []
+        : await db
+          .select({
+            issueId: issueWorkProducts.issueId,
+          })
+          .from(issueWorkProducts)
+          .where(
+            and(
+              inArray(issueWorkProducts.issueId, doneIssueIds),
+              inArray(issueWorkProducts.status, [...QUALIFYING_WORK_PRODUCT_STATUSES]),
+            ),
+          );
+      const qualifyingIssueIdSet = new Set(qualifyingProducts.map((row) => row.issueId));
+      const verifiedDoneIssues = doneIssues.filter((issue) => {
+        const requiresReview = isEngineeringOutcomeTitle(issue.title);
+        const hasRequiredReview = !requiresReview || issue.reviewCount > 0;
+        return qualifyingIssueIdSet.has(issue.id) && hasRequiredReview;
+      });
 
-      const completedLast7Days = Number(velocityRow?.count ?? 0);
+      const rawDone = doneIssues.length;
+      const done = verifiedDoneIssues.length;
+      const unverifiedDone = Math.max(0, rawDone - done);
+      const rawCompletionPercent = total > 0 ? Math.round((rawDone / total) * 100) : 0;
+      const completionPercent = total > 0 ? Math.round((done / total) * 100) : 0;
+
+      // Velocity: issues completed per day over last 7 days
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const rawCompletedLast7Days = doneIssues.filter(
+        (issue) => issue.completedAt && issue.completedAt >= sevenDaysAgo,
+      ).length;
+      const completedLast7Days = verifiedDoneIssues.filter(
+        (issue) => issue.completedAt && issue.completedAt >= sevenDaysAgo,
+      ).length;
       const velocityPerDay = completedLast7Days / 7;
 
       // Estimated completion (remaining issues / velocity)
@@ -466,10 +508,14 @@ export function goalService(db: Db) {
         totalIssues: total,
         byStatus,
         done,
+        rawDone,
+        unverifiedDone,
         remaining,
         completionPercent,
+        rawCompletionPercent,
         velocityPerDay: Math.round(velocityPerDay * 100) / 100,
         completedLast7Days,
+        rawCompletedLast7Days,
         estimatedDaysToComplete,
       };
     },

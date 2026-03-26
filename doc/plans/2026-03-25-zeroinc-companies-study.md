@@ -56,6 +56,7 @@ Arquivo: `server/src/services/heartbeat.ts`
 8. P2.1 Programas permanentes por objetivo macro (Open Source, Enterprise, Operating Model + ciclos trimestrais): implementado.
 9. P2.2 Debate curto entre especialistas (PM/CTO/QA/Researcher) para propostas críticas/altas: implementado.
 10. P2.3 Métrica semanal de valor entregue (`valueDelivery` score 0-100 com penalidade de OPS/meta): implementado.
+11. P2.4 Progresso de goal baseado em evidência real (done verificado + métricas raw de auditoria): implementado.
 
 ## P0 (executar agora)
 

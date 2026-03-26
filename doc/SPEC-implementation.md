@@ -468,8 +468,13 @@ All endpoints are under `/api` and return JSON.
 - `POST /companies/:companyId/goals`
 - `POST /companies/:companyId/goals/ensure-programs` (idempotent seed/renew of macro programs + current quarter cycle goals)
 - `GET /goals/:goalId`
+- `GET /goals/:goalId/progress`
 - `PATCH /goals/:goalId`
 - `DELETE /goals/:goalId` (soft delete optional, hard delete board-only)
+
+Goal progress semantics:
+- `completionPercent` and `completedLast7Days` are evidence-based (only `done` issues with qualifying work product + required review)
+- payload also returns raw counters (`rawDone`, `rawCompletionPercent`, `rawCompletedLast7Days`) for auditability
 
 ## 10.3 Agents
 
