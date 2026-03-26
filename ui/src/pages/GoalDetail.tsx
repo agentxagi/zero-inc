@@ -52,6 +52,12 @@ export function GoalDetail() {
     enabled: !!resolvedCompanyId
   });
 
+  const { data: goalProgress } = useQuery({
+    queryKey: queryKeys.goals.progress(goalId!),
+    queryFn: () => goalsApi.progress(goalId!),
+    enabled: !!goalId,
+  });
+
   useEffect(() => {
     if (!goal?.companyId || goal.companyId === selectedCompanyId) return;
     setSelectedCompanyId(goal.companyId, { source: "route_sync" });
@@ -144,6 +150,38 @@ export function GoalDetail() {
           }}
         />
       </div>
+
+      {goalProgress ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <div className="rounded-md border border-border px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Verified Completion</p>
+              <p className="text-lg font-semibold">{goalProgress.completionPercent}%</p>
+            </div>
+            <div className="rounded-md border border-border px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Raw Completion</p>
+              <p className="text-lg font-semibold">{goalProgress.rawCompletionPercent}%</p>
+            </div>
+            <div className="rounded-md border border-border px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Verified Done (7d)</p>
+              <p className="text-lg font-semibold">{goalProgress.completedLast7Days}</p>
+            </div>
+            <div className="rounded-md border border-border px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Velocity / Day</p>
+              <p className="text-lg font-semibold">{goalProgress.velocityPerDay}</p>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border px-4 py-3">
+            <p className="text-xs text-muted-foreground">
+              Verified done: {goalProgress.done} · Raw done: {goalProgress.rawDone} · Unverified done: {goalProgress.unverifiedDone}
+              {goalProgress.estimatedDaysToComplete != null
+                ? ` · ETA: ${goalProgress.estimatedDaysToComplete} day(s)`
+                : ""}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <Tabs defaultValue="children">
         <TabsList>

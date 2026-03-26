@@ -58,6 +58,7 @@ Arquivo: `server/src/services/heartbeat.ts`
 10. P2.3 Métrica semanal de valor entregue (`valueDelivery` score 0-100 com penalidade de OPS/meta): implementado.
 11. P2.4 Progresso de goal baseado em evidência real (done verificado + métricas raw de auditoria): implementado.
 12. P2.5 Visibilidade no Dashboard dos sinais do Product Council (score semanal, gate, debate e propostas): implementado.
+13. P2.6 Goal Detail com progresso verificado x bruto e sinal de unverified done: implementado.
 
 ## P0 (executar agora)
 
